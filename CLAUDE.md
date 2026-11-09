@@ -162,7 +162,7 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 
 - Course name and instructor live in a `sections` table (per section, not per meeting).
 - Course codes are stored as `COMP201` (`normalizeCourseCode`: strip spaces, ASCII uppercase — not Turkish locale, which would turn "histr" into "HİSTR") and shown as `COMP 201` (`displayCourseCode`). Sections drop leading zeros ("01" → "1"). All in `lib/course-code.ts`.
-- `.ics` times are written in UTC (`…Z`), no `VTIMEZONE`.
+- `.ics` event times are written as `DTSTART;TZID=Europe/Istanbul:…` with a fixed +03:00 `VTIMEZONE` block (only `DTSTAMP` is UTC, as RFC 5545 requires). First version used UTC `…Z` times; iPhone then showed "09:00 (06:00 GMT)" on every event. UIDs did not change with the switch.
 
 ## Environment notes (learned during setup)
 

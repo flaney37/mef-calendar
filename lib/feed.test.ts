@@ -31,11 +31,11 @@ describe("buildFeed", () => {
     expect(events(buildFeed(input))).toHaveLength(13);
   });
 
-  it("shows the course code with a space, room and Istanbul time in UTC", () => {
+  it("shows the course code with a space, room and Istanbul local time", () => {
     const [first] = events(buildFeed(input));
     expect(first).toContain("SUMMARY:COMP 201\r\n");
     expect(first).toContain("LOCATION:5-101\r\n");
-    expect(first).toContain("DTSTART:20260914T060000Z\r\n");
+    expect(first).toContain("DTSTART;TZID=Europe/Istanbul:20260914T090000\r\n");
     expect(first).toContain("UID:COMP201-1-20260914-0900@mef-calendar\r\n");
   });
 

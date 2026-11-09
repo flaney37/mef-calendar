@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildCalendar, escapeText, foldLine, formatUtc, type IcsEvent } from "./ics";
+import {
+  buildCalendar,
+  escapeText,
+  foldLine,
+  formatIstanbul,
+  formatUtc,
+  type IcsEvent,
+} from "./ics";
 
 const bytes = (s: string) => new TextEncoder().encode(s).length;
 const unfold = (s: string) => s.replace(/\r\n /g, "");
@@ -18,6 +25,16 @@ const event: IcsEvent = {
 describe("formatUtc", () => {
   it("writes basic UTC format without separators or milliseconds", () => {
     expect(formatUtc(new Date("2026-09-14T06:00:00.000Z"))).toBe("20260914T060000Z");
+  });
+});
+
+describe("formatIstanbul", () => {
+  it("writes Istanbul wall-clock time without the Z suffix", () => {
+    expect(formatIstanbul(new Date("2026-09-14T06:00:00.000Z"))).toBe("20260914T090000");
+  });
+
+  it("rolls over to the next day after 21:00 UTC", () => {
+    expect(formatIstanbul(new Date("2026-09-14T22:30:00.000Z"))).toBe("20260915T013000");
   });
 });
 
@@ -71,7 +88,32 @@ describe("buildCalendar", () => {
     expect(lines).toContain("VERSION:2.0");
     expect(lines).toContain("PRODID:-//mef-calendar//TR");
     expect(lines).toContain("X-WR-CALNAME:MEF Ders Takvimi");
-    expect(ics).not.toContain("VTIMEZONE"); // UTC only, never mixed
+  });
+
+  it("defines Europe/Istanbul as a fixed +03:00 zone", () => {
+    const lines = ics.split("\r\n");
+    const start = lines.indexOf("BEGIN:VTIMEZONE");
+    expect(start).toBeGreaterThan(0);
+    expect(lines.slice(start, start + 9)).toEqual([
+      "BEGIN:VTIMEZONE",
+      "TZID:Europe/Istanbul",
+      "BEGIN:STANDARD",
+      "DTSTART:19700101T000000",
+      "TZOFFSETFROM:+0300",
+      "TZOFFSETTO:+0300",
+      "TZNAME:+03",
+      "END:STANDARD",
+      "END:VTIMEZONE",
+    ]);
+    // The zone must be defined before any event that uses it.
+    expect(start).toBeLessThan(lines.indexOf("BEGIN:VEVENT"));
+  });
+
+  it("never mixes UTC and local event times", () => {
+    // Only inside events: VTIMEZONE has its own required bare DTSTART.
+    const vevents = ics.split("BEGIN:VEVENT").slice(1).join("");
+    expect(vevents).toContain("DTSTART;TZID=");
+    expect(vevents).not.toMatch(/^DT(START|END):/m);
   });
 
   it("writes the event fields", () => {
@@ -81,8 +123,8 @@ describe("buildCalendar", () => {
         "BEGIN:VEVENT",
         "UID:COMP201-1-20260914-0900@mef-calendar",
         "DTSTAMP:20260901T120000Z",
-        "DTSTART:20260914T060000Z",
-        "DTEND:20260914T075000Z",
+        "DTSTART;TZID=Europe/Istanbul:20260914T090000",
+        "DTEND;TZID=Europe/Istanbul:20260914T105000",
         "SUMMARY:COMP 201",
         "LOCATION:5-101",
         "DESCRIPTION:Data Structures\\nŞube: 1",

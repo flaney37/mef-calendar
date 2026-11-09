@@ -1,7 +1,28 @@
 // Minimal iCalendar (RFC 5545) writer. It knows nothing about courses;
 // lib/feed.ts turns sessions into IcsEvents.
 //
-// All times are written in UTC ("…Z"), so no VTIMEZONE block is needed.
+// Event times are written as Istanbul local time with TZID=Europe/Istanbul,
+// defined by the VTIMEZONE block below. (Plain UTC "…Z" times also work, but
+// iPhone then shows "09:00 (06:00 GMT)" on every event.) DTSTAMP stays in
+// UTC because the standard requires it.
+
+import { ISTANBUL_UTC_OFFSET_HOURS } from "./schedule";
+
+export const TZID = "Europe/Istanbul";
+
+// Türkiye has used fixed UTC+3 with no daylight saving since 2016, so a
+// single STANDARD rule describes it completely.
+const VTIMEZONE = [
+  "BEGIN:VTIMEZONE",
+  `TZID:${TZID}`,
+  "BEGIN:STANDARD",
+  "DTSTART:19700101T000000",
+  "TZOFFSETFROM:+0300",
+  "TZOFFSETTO:+0300",
+  "TZNAME:+03",
+  "END:STANDARD",
+  "END:VTIMEZONE",
+];
 
 export type IcsEvent = {
   uid: string;
@@ -24,6 +45,12 @@ const encoder = new TextEncoder();
 // 2026-09-14T06:00:00.000Z → 20260914T060000Z
 export function formatUtc(date: Date): string {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+// 2026-09-14T06:00:00.000Z → 20260914T090000 (Istanbul wall clock, no "Z")
+export function formatIstanbul(date: Date): string {
+  const shifted = new Date(date.getTime() + ISTANBUL_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+  return formatUtc(shifted).slice(0, -1);
 }
 
 // In TEXT values, backslash, semicolon, comma and newlines must be escaped,
@@ -65,8 +92,8 @@ function eventLines(event: IcsEvent, now: Date): string[] {
     "BEGIN:VEVENT",
     `UID:${event.uid}`,
     `DTSTAMP:${formatUtc(now)}`,
-    `DTSTART:${formatUtc(event.start)}`,
-    `DTEND:${formatUtc(event.end)}`,
+    `DTSTART;TZID=${TZID}:${formatIstanbul(event.start)}`,
+    `DTEND;TZID=${TZID}:${formatIstanbul(event.end)}`,
     `SUMMARY:${escapeText(event.summary)}`,
   ];
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
@@ -90,6 +117,8 @@ export function buildCalendar(calendar: IcsCalendar): string {
     // read one or the other; Google ignores both and picks its own pace).
     "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
     "X-PUBLISHED-TTL:PT1H",
+    `X-WR-TIMEZONE:${TZID}`,
+    ...VTIMEZONE,
     ...calendar.events.flatMap((e) => eventLines(e, calendar.now)),
     "END:VCALENDAR",
   ];
