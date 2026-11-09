@@ -40,8 +40,11 @@ semesters      id, name ("2026-2027 Fall"), start_date, end_date, holidays (date
 students       id, feed_token, edit_token, semester_id, created_at
                (NO name, email, student number or national ID)
 enrollments    student_id, course_code, section
+sections       semester_id, course_code, section, course_name, instructor
+               (unique per section; shared; later students only fill empty fields)
 meetings       semester_id, course_code, section, weekday (1-7), start_time, end_time, room
-               (one record per section; shared across students)
+               (one record per weekly slot of a section; shared across students;
+               unique on semester + course + section + weekday + start_time)
 course_events  id, semester_id, course_code, section (null = all sections),
                type: cancel | makeup | room_change | exam | other,
                date, start_time, end_time, room, title, note,
@@ -92,11 +95,12 @@ course_events  id, semester_id, course_code, section (null = all sections),
 
 ### Phase 1 — Manual input → working calendar link (first end-to-end version)
 Goal: a subscription that works on a phone, by the shortest path, without AI.
-- [ ] Simple form: course code, section, day, start-end time, room (add/remove rows)
-- [ ] Save → create `students` + `enrollments` + `meetings`, show the feed and edit links
-- [ ] `lib/schedule.ts`: semester + holidays + weekly meetings → list of individual sessions
-- [ ] `GET /cal/[token].ics` endpoint, stable UIDs
-- [ ] Vitest: skipping holidays, semester boundaries, UID stability, time zone
+- [x] Simple form: course code, section, day, start-end time, room (add/remove rows) — `app/schedule-form.tsx`, one card per course with 0+ slots
+- [x] Save → create `students` + `enrollments` + `meetings`, show the feed and edit links — `lib/db/save-schedule.ts`, one `db.batch` transaction
+- [x] `lib/schedule.ts`: semester + holidays + weekly meetings → list of individual sessions
+- [x] `GET /cal/[token].ics` endpoint, stable UIDs — `app/cal/[token]/route.ts`, pure `lib/feed.ts` + `lib/ics.ts`
+- [x] Vitest: skipping holidays, semester boundaries, UID stability, time zone (tests run with `TZ=America/Los_Angeles`)
+- [ ] `/edit/[editToken]` page (the link is shown after saving but 404s until this exists)
 - [ ] **Acceptance:** I enter my own schedule and can subscribe in Apple Calendar (Mac + iPhone); classes appear on the right day and time
 
 ### Phase 2 — Import from screenshot
@@ -151,8 +155,14 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - Project name and domain (for now `mef-calendar.vercel.app`)
 - Finals week: answered for Fall 2026 — classes end 2026-12-11, then the project/presentation period. Should that period appear in the calendar at all?
 - How are makeup classes usually announced (same mail or separate)?
-- The .ics `DESCRIPTION` needs course name and instructor, but the data model has no place for them. Options: add `course_name` / `instructor` to `meetings`, or a small `sections` table (semester, code, section, name, instructor). Decide in Phase 1.
-- Course code format: store normalized without spaces (`COMP201`) and display with a space (`COMP 201`)? Needs one normalize function used everywhere.
+- Meeting conflicts are only logged (Vercel logs, `meetings conflict for …`). If the first student entered wrong times, nobody can fix them yet: the correction flow is still open.
+- "Current semester" = the one with the latest `start_date`. Revisit when Spring is seeded before Fall ends.
+
+## Decisions made during Phase 1
+
+- Course name and instructor live in a `sections` table (per section, not per meeting).
+- Course codes are stored as `COMP201` (`normalizeCourseCode`: strip spaces, ASCII uppercase — not Turkish locale, which would turn "histr" into "HİSTR") and shown as `COMP 201` (`displayCourseCode`). Sections drop leading zeros ("01" → "1"). All in `lib/course-code.ts`.
+- `.ics` times are written in UTC (`…Z`), no `VTIMEZONE`.
 
 ## Environment notes (learned during setup)
 
