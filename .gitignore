@@ -43,3 +43,6 @@ next-env.d.ts
 
 # raw data pulled from SIS (catalog etc.), never committed
 /data/
+
+# tesseract.js language data cached by local OCR runs
+*.traineddata

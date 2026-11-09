@@ -112,12 +112,13 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
   - 2026-11-10 full schedule ✅: 7 courses (5 from the catalog, HISTR 213 / TURK 114 without slots), 98 events; the week of 9–13 Nov in Apple Calendar matches the SIS weekly grid exactly (days, times, rooms).
 
 ### Phase 2 — Import from screenshot
-- [ ] Spike: run Tesseract.js on a real SIS screenshot and look at the raw text
-- [ ] `lib/extract.ts`: OCR text → `{code, section}` list; fix OCR confusions (O/0, I/1, S/5…) by matching against the catalog; Vitest with real OCR output
-- [ ] Upload screen (phone gallery / desktop file), short guide text; OCR in a Web Worker, lazy-loaded so the main page stays light
-- [ ] "Review" screen: the Phase 1 form, pre-filled with the OCR result (catalog fills the times); the student corrects and saves
-- [ ] Courses without a time slot (e.g. HISTR 213, TURK 114): not put on the calendar but kept in `enrollments`
-- [ ] Error cases: OCR finds nothing / fails to load → fall back to the manual input form
+- [x] Spike: run Tesseract.js on a real SIS screenshot and look at the raw text — at original size (2000 px wide page) codes came out garbled ("coup 201", "eE209", "wa 211"), course names were fine; **upscaled 3x every code and section was exact** (confidence 66 → 85)
+- [x] `lib/extract.ts`: OCR text → `{code, section, name}` rows under the "DERS KODU" header; codes not in the catalog are repaired by course name + section (Dice similarity ≥ 0.7). Tests use both real OCR outputs; both give all 7 courses right, also against the full catalog
+- [x] Upload screen (`app/screenshot-import.tsx`): file picker (`accept="image/*"`), image upscaled on a canvas (≤3x, ~4500 px wide), `tesseract.js` imported only when a file is picked (it runs its own Web Worker; worker, WASM core and `eng` data come from the jsDelivr CDN and are cached by the browser)
+- [x] "Review" screen: the Phase 1 form, pre-filled with the OCR result (catalog fills the times); the student corrects and saves
+- [x] Courses without a time slot (e.g. HISTR 213, TURK 114): not put on the calendar but kept in `enrollments`
+- [x] Error cases: OCR finds nothing / fails → message, the (empty) manual form stays below
+- Verified locally: OCR of the sample took ~6 s in Chromium; the only request to our server was 504 bytes of code/section/name for 7 rows (no image, no instructor or advisor names).
 - [ ] **Acceptance:** I upload my own screenshot and get the correct calendar in under a minute
 
 ### Phase 3 — Cancellations, exams and room changes (manual input, fallback panel)

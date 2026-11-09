@@ -66,6 +66,14 @@ export async function lookupCatalogSection(
   return { found: true, courseName: match.courseName, instructor: match.instructor, slots };
 }
 
+// Code, section and name of every catalog section, for matching OCR rows.
+export async function catalogEntries(semesterId: number) {
+  return db
+    .select({ courseCode: sections.courseCode, section: sections.section, courseName: sections.courseName })
+    .from(sections)
+    .where(and(eq(sections.semesterId, semesterId), eq(sections.source, "catalog")));
+}
+
 export type EditCourse = {
   code: string;
   section: string;

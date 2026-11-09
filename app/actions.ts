@@ -2,7 +2,14 @@
 
 import { z } from "zod";
 import { COURSE_CODE_PATTERN, normalizeCourseCode, normalizeSection } from "@/lib/course-code";
-import { currentSemesterId, lookupCatalogSection, type CatalogLookup } from "@/lib/db/queries";
+import {
+  catalogEntries,
+  currentSemesterId,
+  lookupCatalogSection,
+  type CatalogLookup,
+  type EditCourse,
+} from "@/lib/db/queries";
+import { matchToCatalog } from "@/lib/extract";
 import {
   createStudentSchedule,
   deleteStudent,
@@ -83,6 +90,39 @@ export async function deleteSchedule(editToken: unknown): Promise<ActionResult> 
     console.error(`deleteSchedule ${truncateToken(token.data)} failed`, error);
     return { ok: false, error: FAILED };
   }
+}
+
+// Rows found by OCR in the browser. Only code, section and course name ever
+// reach the server; the image and the rest of the OCR text never do.
+const ocrRowsSchema = z
+  .array(
+    z.object({
+      code: z.string().max(20),
+      section: z.string().max(5),
+      name: z.string().max(200),
+    }),
+  )
+  .max(20);
+
+// OCR rows → courses ready for the review form: catalog sections come with
+// their official slots, others (e.g. HISTR 213) without slots.
+export async function coursesFromOcr(raw: unknown): Promise<EditCourse[] | null> {
+  const rows = ocrRowsSchema.safeParse(raw);
+  if (!rows.success) return null;
+  const semesterId = await currentSemesterId();
+  const matched = matchToCatalog(rows.data, await catalogEntries(semesterId));
+
+  return Promise.all(
+    matched.map(async (m): Promise<EditCourse> => {
+      if (m.match === "none") {
+        return { code: m.code, section: m.section, source: "student", courseName: null, instructor: null, slots: [] };
+      }
+      const found = await lookupCatalogSection(semesterId, m.code, m.section);
+      return found.found
+        ? { code: m.code, section: m.section, source: "catalog", ...found }
+        : { code: m.code, section: m.section, source: "student", courseName: null, instructor: null, slots: [] };
+    }),
+  );
 }
 
 const lookupSchema = z.object({

@@ -1,4 +1,4 @@
-import { ScheduleForm } from "./schedule-form";
+import { NewSchedule } from "./new-schedule";
 
 export default function Home() {
   return (
@@ -10,7 +10,7 @@ export default function Home() {
           değişiklikleri takvimine kendiliğinden düşsün.
         </p>
       </header>
-      <ScheduleForm />
+      <NewSchedule />
     </main>
   );
 }
