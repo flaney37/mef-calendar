@@ -109,8 +109,9 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - [x] `GET /cal/[token].ics` endpoint, stable UIDs — `app/cal/[token]/route.ts`, pure `lib/feed.ts` + `lib/ics.ts`
 - [x] Vitest: skipping holidays, semester boundaries, UID stability, time zone (tests run with `TZ=America/Los_Angeles`)
 - [x] `/edit/[editToken]` page — same form pre-filled; save keeps the feed URL; "Bağlantımı yenile" (new feed token, old one 404s) and "Kaydımı sil" (deletes student + enrollments). For a non-catalog section the editor may change its slots only if no other student is in it; otherwise the existing slots are kept and the form warns.
-- [ ] **Acceptance:** I enter my own schedule and can subscribe in Apple Calendar (Mac + iPhone); classes appear on the right day and time
-  - 2026-11-10 iPhone ✅ (one course, COMP 201): right day/time/room, no duplicates after refresh, 26 Oct shown and 28–30 Oct skipped, nothing after 11 Dec, no "(GMT)" after the VTIMEZONE switch. Mac ✅ (File → New Calendar Subscription, every Monday incl. 26 Oct). Still to do: full schedule.
+- [x] **Acceptance:** I enter my own schedule and can subscribe in Apple Calendar (Mac + iPhone); classes appear on the right day and time
+  - 2026-11-10 iPhone ✅ (one course, COMP 201): right day/time/room, no duplicates after refresh, 26 Oct shown and 28–30 Oct skipped, nothing after 11 Dec, no "(GMT)" after the VTIMEZONE switch. Mac ✅ (File → New Calendar Subscription, every Monday incl. 26 Oct).
+  - 2026-11-10 full schedule ✅: 7 courses (5 from the catalog, HISTR 213 / TURK 114 without slots), 98 events; the week of 9–13 Nov in Apple Calendar matches the SIS weekly grid exactly (days, times, rooms).
 
 ### Phase 2 — Import from screenshot
 - [ ] Upload screen (including phone camera/gallery)
@@ -143,6 +144,8 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 ### Phase 5 — Blackboard assignments and pilot
 - [ ] Optional: the student adds their Blackboard calendar link; the feed merges assignments (with an option to filter noise such as "In-class:" items). The link is stored encrypted and can be deleted.
 - [ ] Mobile-friendly UI polish, subscription instructions (iPhone / Mac / Google / Outlook)
+- [ ] "Send my links by email": losing the edit link is easy (it already happened once in testing, and the only fix was a new record). Send the feed + edit links to an address the student types, **without storing the address** (the `students` table must stay free of email). Needs a free transactional email service; check the privacy rules before choosing one.
+- [ ] Optional terminal-style theme (and a light/dark toggle): move hard-coded Tailwind colors to CSS variables first. Owner showed a mockup on 2026-11-10; no command line or personal events, only the look.
 - [ ] Pilot: my own section + 10-20 friends, 2-3 weeks; collect feedback
 - [ ] Simple usage metrics (number of feeds, number of events) — without personal data
 
