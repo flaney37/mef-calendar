@@ -86,8 +86,8 @@ course_events  id, semester_id, course_code, section (null = all sections),
 
 ### Phase 0 — Setup
 - [x] Next.js + TypeScript + Tailwind + pnpm project
-- [ ] Drizzle + Neon connection, first migration (`semesters`, `students`, `enrollments`, `meetings`, `course_events`) — schema + migration file done (`lib/db/schema.ts`, `drizzle/0000_*.sql`); not yet applied, waiting for a Neon database
-- [ ] Vercel project, environment variables, first deploy
+- [x] Drizzle + Neon connection, first migration (`semesters`, `students`, `enrollments`, `meetings`, `course_events`)
+- [x] Vercel project, environment variables, first deploy — repo `flaney37/mef-calendar`, Vercel team "yigit n friends" (Hobby), Neon free in Frankfurt
 - [ ] Seed a 2026-2027 Fall row in `semesters` (start/end dates and public holidays — **TODO: take from the academic calendar**)
 
 ### Phase 1 — Manual input → working calendar link (first end-to-end version)
@@ -156,3 +156,5 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - pnpm 12 blocks dependency build scripts by default; allowed ones are listed in `pnpm-workspace.yaml` → `allowBuilds` (esbuild is allowed, drizzle-kit needs it).
 - `pnpm typecheck` runs `next typegen` first, because global types like `LayoutProps` are generated.
 - Scripts: `pnpm dev | build | lint | typecheck | test | db:generate | db:migrate | db:studio`.
+- Neon was added through the Vercel integration with prefix `DATABASE` (→ `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, plus `PG*` / `POSTGRES_*` aliases), Auth off, "Sensitive" off so the value can be copied for Development. Local copy lives in `.env.local` (gitignored).
+- New migration flow: edit `lib/db/schema.ts` → `pnpm db:generate` → review the SQL in `drizzle/` → `pnpm db:migrate` (applies to the Neon DB in `.env.local`, which is the same DB production uses).
