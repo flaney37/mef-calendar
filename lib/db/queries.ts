@@ -13,6 +13,59 @@ export async function currentSemesterId(): Promise<number> {
   return semester.id;
 }
 
+export type CatalogLookup =
+  | {
+      found: true;
+      courseName: string | null;
+      instructor: string | null;
+      slots: { weekday: number; startTime: string; endTime: string; room: string | null }[];
+    }
+  // otherSections: the course exists in the catalog, but not this section.
+  | { found: false; otherSections: string[] };
+
+export async function lookupCatalogSection(
+  semesterId: number,
+  courseCode: string,
+  section: string,
+): Promise<CatalogLookup> {
+  const rows = await db
+    .select({ section: sections.section, courseName: sections.courseName, instructor: sections.instructor })
+    .from(sections)
+    .where(
+      and(
+        eq(sections.semesterId, semesterId),
+        eq(sections.courseCode, courseCode),
+        eq(sections.source, "catalog"),
+      ),
+    );
+  const match = rows.find((r) => r.section === section);
+  if (!match) {
+    return {
+      found: false,
+      otherSections: rows.map((r) => r.section).sort((a, b) => Number(a) - Number(b)),
+    };
+  }
+
+  const slots = await db
+    .select({
+      weekday: meetings.weekday,
+      startTime: meetings.startTime,
+      endTime: meetings.endTime,
+      room: meetings.room,
+    })
+    .from(meetings)
+    .where(
+      and(
+        eq(meetings.semesterId, semesterId),
+        eq(meetings.courseCode, courseCode),
+        eq(meetings.section, section),
+      ),
+    )
+    .orderBy(meetings.weekday, meetings.startTime);
+
+  return { found: true, courseName: match.courseName, instructor: match.instructor, slots };
+}
+
 // Everything needed to build one student's feed, or null for an unknown token.
 export async function loadFeedData(feedToken: string): Promise<Omit<FeedInput, "now"> | null> {
   const [student] = await db

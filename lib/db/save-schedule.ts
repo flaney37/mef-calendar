@@ -19,11 +19,34 @@ function slotSignature(slots: SlotRow[]): string {
 
 const keyOf = (c: { courseCode: string; section: string }) => `${c.courseCode}-${c.section}`;
 
-// Meetings are shared per section: the first student to save a section
-// defines its slots. Later students reuse them; if they report different
-// slots, we log the conflict and keep the existing ones (CLAUDE.md).
+// Meetings are shared per section. Catalog sections already have the
+// official slots, so whatever the student sent for them is ignored. For a
+// section outside the catalog, the first student to save it defines its
+// slots; if a later student reports different ones, we log the conflict and
+// keep the existing ones (CLAUDE.md).
 async function newMeetingRows(semesterId: number, courses: CourseInput[]) {
-  const timed = courses.filter((c) => c.slots.length > 0);
+  const sameSection = (c: CourseInput) =>
+    and(eq(sections.courseCode, c.code), eq(sections.section, c.section));
+  const catalogKeys = new Set(
+    courses.length === 0
+      ? []
+      : (
+          await db
+            .select({ courseCode: sections.courseCode, section: sections.section })
+            .from(sections)
+            .where(
+              and(
+                eq(sections.semesterId, semesterId),
+                eq(sections.source, "catalog"),
+                or(...courses.map(sameSection)),
+              ),
+            )
+        ).map(keyOf),
+  );
+
+  const timed = courses.filter(
+    (c) => c.slots.length > 0 && !catalogKeys.has(keyOf({ courseCode: c.code, section: c.section })),
+  );
   if (timed.length === 0) return [];
 
   const existing = await db

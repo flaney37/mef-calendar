@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { CatalogLookup } from "@/lib/db/queries";
 import { scheduleSchema } from "@/lib/schedule-input";
-import { createSchedule } from "./actions";
+import { createSchedule, lookupSection } from "./actions";
 
 const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
@@ -14,6 +15,8 @@ type CourseDraft = {
   courseName: string;
   instructor: string;
   slots: SlotDraft[];
+  // Result of the catalog lookup for code + section; null until looked up.
+  catalog: CatalogLookup | null;
 };
 
 // A plain counter for React keys: deterministic, so the server-rendered
@@ -33,7 +36,10 @@ const newCourse = (): CourseDraft => ({
   courseName: "",
   instructor: "",
   slots: [newSlot()],
+  catalog: null,
 });
+
+const isUntouchedSlot = (s: SlotDraft) => !s.startTime && !s.endTime && !s.room;
 
 const inputClass =
   "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900";
@@ -55,19 +61,49 @@ export function ScheduleForm() {
       ),
     );
 
+  // Runs when the code or section field loses focus.
+  async function lookup(course: CourseDraft) {
+    if (!course.code.trim() || !course.section.trim()) return;
+    const asked = { code: course.code, section: course.section };
+    const found = await lookupSection(asked);
+    setCourses((cs) =>
+      cs.map((c) => {
+        // Ignore the answer if the fields changed while it was on the way.
+        if (c.id !== course.id || c.code !== asked.code || c.section !== asked.section) return c;
+        // Not in the catalog at all: most likely a course without a fixed
+        // slot (HISTR 213), so drop the empty slot row the card starts with.
+        const noSlotCourse =
+          found && !found.found && found.otherSections.length === 0 &&
+          c.slots.length === 1 && isUntouchedSlot(c.slots[0]);
+        return { ...c, catalog: found, slots: noSlotCourse ? [] : c.slots };
+      }),
+    );
+  }
+
+  function payload() {
+    // Catalog sections: the server uses the official slots and details.
+    return {
+      courses: courses.map((c) =>
+        c.catalog?.found
+          ? { code: c.code, section: c.section, slots: [] }
+          : { code: c.code, section: c.section, courseName: c.courseName, instructor: c.instructor, slots: c.slots },
+      ),
+    };
+  }
+
   function submit(event: React.FormEvent) {
     event.preventDefault();
     // Same schema as the server: catch mistakes before the round trip.
-    const parsed = scheduleSchema.safeParse({ courses });
+    const parsed = scheduleSchema.safeParse(payload());
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Bilgileri kontrol et");
       return;
     }
     setError(null);
     startTransition(async () => {
-      // Send the raw drafts, not parsed.data: the server parses them again,
-      // and its schema expects the form's strings, not the parsed output.
-      const res = await createSchedule({ courses });
+      // Send the raw form values, not parsed.data: the server parses them
+      // again, and its schema expects the form's strings, not parsed output.
+      const res = await createSchedule(payload());
       if (res.ok) setResult(res);
       else setError(res.error);
     });
@@ -102,7 +138,8 @@ export function ScheduleForm() {
                 className={inputClass}
                 placeholder="COMP 201"
                 value={course.code}
-                onChange={(e) => updateCourse(course.id, { code: e.target.value })}
+                onChange={(e) => updateCourse(course.id, { code: e.target.value, catalog: null })}
+                onBlur={() => lookup(course)}
                 autoCapitalize="characters"
                 required
               />
@@ -114,98 +151,22 @@ export function ScheduleForm() {
                 placeholder="1"
                 inputMode="numeric"
                 value={course.section}
-                onChange={(e) => updateCourse(course.id, { section: e.target.value })}
+                onChange={(e) => updateCourse(course.id, { section: e.target.value, catalog: null })}
+                onBlur={() => lookup(course)}
                 required
               />
             </label>
           </div>
 
-          <label className="flex flex-col gap-1 text-sm">
-            Ders adı (isteğe bağlı)
-            <input
-              className={inputClass}
-              placeholder="Data Structures"
-              value={course.courseName}
-              onChange={(e) => updateCourse(course.id, { courseName: e.target.value })}
+          {course.catalog?.found ? (
+            <CatalogInfo info={course.catalog} />
+          ) : (
+            <ManualEntry
+              course={course}
+              updateCourse={updateCourse}
+              updateSlot={updateSlot}
             />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Öğretim üyesi (isteğe bağlı)
-            <input
-              className={inputClass}
-              value={course.instructor}
-              onChange={(e) => updateCourse(course.id, { instructor: e.target.value })}
-            />
-          </label>
-
-          <div className="flex flex-col gap-2">
-            <span className="text-sm">Ders saatleri</span>
-            {course.slots.length === 0 && (
-              <p className="text-sm text-zinc-500">
-                Sabit saati yok (ör. HISTR 213). Takvime eklenmez.
-              </p>
-            )}
-            {course.slots.map((slot) => (
-              <div
-                key={slot.id}
-                className="grid grid-cols-2 gap-2 rounded-md bg-zinc-50 p-2 sm:grid-cols-[1.4fr_1fr_1fr_1fr_auto] dark:bg-zinc-900/50"
-              >
-                <select
-                  aria-label="Gün"
-                  className={`${inputClass} col-span-2 sm:col-span-1`}
-                  value={slot.weekday}
-                  onChange={(e) => updateSlot(course.id, slot.id, { weekday: e.target.value })}
-                >
-                  {WEEKDAYS.map((day, i) => (
-                    <option key={day} value={i + 1}>
-                      {day}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  aria-label="Başlangıç"
-                  type="time"
-                  className={inputClass}
-                  value={slot.startTime}
-                  onChange={(e) => updateSlot(course.id, slot.id, { startTime: e.target.value })}
-                  required
-                />
-                <input
-                  aria-label="Bitiş"
-                  type="time"
-                  className={inputClass}
-                  value={slot.endTime}
-                  onChange={(e) => updateSlot(course.id, slot.id, { endTime: e.target.value })}
-                  required
-                />
-                <input
-                  aria-label="Sınıf"
-                  placeholder="Sınıf"
-                  className={inputClass}
-                  value={slot.room}
-                  onChange={(e) => updateSlot(course.id, slot.id, { room: e.target.value })}
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateCourse(course.id, {
-                      slots: course.slots.filter((s) => s.id !== slot.id),
-                    })
-                  }
-                  className="text-sm text-red-600"
-                >
-                  Saati sil
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => updateCourse(course.id, { slots: [...course.slots, newSlot()] })}
-              className="self-start text-sm text-blue-600"
-            >
-              + Saat ekle
-            </button>
-          </div>
+          )}
         </fieldset>
       ))}
 
@@ -231,6 +192,132 @@ export function ScheduleForm() {
         {pending ? "Kaydediliyor…" : "Takvimimi oluştur"}
       </button>
     </form>
+  );
+}
+
+function CatalogInfo({ info }: { info: Extract<CatalogLookup, { found: true }> }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-md bg-emerald-50 p-3 text-sm dark:bg-emerald-950/40">
+      <span className="font-medium">✓ Ders programından bulundu</span>
+      {info.courseName && <span>{info.courseName}</span>}
+      {info.instructor && <span className="text-zinc-600 dark:text-zinc-400">{info.instructor}</span>}
+      <ul className="mt-1 flex flex-col gap-0.5">
+        {info.slots.map((s) => (
+          <li key={`${s.weekday}-${s.startTime}`}>
+            {WEEKDAYS[s.weekday - 1]} {s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}
+            {s.room ? ` · ${s.room}` : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ManualEntry({
+  course,
+  updateCourse,
+  updateSlot,
+}: {
+  course: CourseDraft;
+  updateCourse: (id: number, patch: Partial<CourseDraft>) => void;
+  updateSlot: (courseId: number, slotId: number, patch: Partial<SlotDraft>) => void;
+}) {
+  const others = course.catalog && !course.catalog.found ? course.catalog.otherSections : [];
+  return (
+    <>
+      {course.catalog && !course.catalog.found && (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          {others.length > 0
+            ? `Ders programında bu şube yok. Bu dersin şubeleri: ${others.join(", ")}.`
+            : "Ders programında yok. Sabit saati varsa elle gir, yoksa boş bırak."}
+        </p>
+      )}
+
+      <label className="flex flex-col gap-1 text-sm">
+        Ders adı (isteğe bağlı)
+        <input
+          className={inputClass}
+          placeholder="Data Structures"
+          value={course.courseName}
+          onChange={(e) => updateCourse(course.id, { courseName: e.target.value })}
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        Öğretim üyesi (isteğe bağlı)
+        <input
+          className={inputClass}
+          value={course.instructor}
+          onChange={(e) => updateCourse(course.id, { instructor: e.target.value })}
+        />
+      </label>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-sm">Ders saatleri</span>
+        {course.slots.length === 0 && (
+          <p className="text-sm text-zinc-500">
+            Sabit saati yok (ör. HISTR 213). Takvime eklenmez.
+          </p>
+        )}
+        {course.slots.map((slot) => (
+          <div
+            key={slot.id}
+            className="grid grid-cols-2 gap-2 rounded-md bg-zinc-50 p-2 sm:grid-cols-[1.4fr_1fr_1fr_1fr_auto] dark:bg-zinc-900/50"
+          >
+            <select
+              aria-label="Gün"
+              className={`${inputClass} col-span-2 sm:col-span-1`}
+              value={slot.weekday}
+              onChange={(e) => updateSlot(course.id, slot.id, { weekday: e.target.value })}
+            >
+              {WEEKDAYS.map((day, i) => (
+                <option key={day} value={i + 1}>
+                  {day}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Başlangıç"
+              type="time"
+              className={inputClass}
+              value={slot.startTime}
+              onChange={(e) => updateSlot(course.id, slot.id, { startTime: e.target.value })}
+              required
+            />
+            <input
+              aria-label="Bitiş"
+              type="time"
+              className={inputClass}
+              value={slot.endTime}
+              onChange={(e) => updateSlot(course.id, slot.id, { endTime: e.target.value })}
+              required
+            />
+            <input
+              aria-label="Sınıf"
+              placeholder="Sınıf"
+              className={inputClass}
+              value={slot.room}
+              onChange={(e) => updateSlot(course.id, slot.id, { room: e.target.value })}
+            />
+            <button
+              type="button"
+              onClick={() =>
+                updateCourse(course.id, { slots: course.slots.filter((s) => s.id !== slot.id) })
+              }
+              className="text-sm text-red-600"
+            >
+              Saati sil
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => updateCourse(course.id, { slots: [...course.slots, newSlot()] })}
+          className="self-start text-sm text-blue-600"
+        >
+          + Saat ekle
+        </button>
+      </div>
+    </>
   );
 }
 

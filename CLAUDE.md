@@ -51,7 +51,15 @@ course_events  id, semester_id, course_code, section (null = all sections),
                status: confirmed | unconfirmed, source: manual | mail, created_at
 ```
 
-`meetings` is stored per section: the second student who uploads the same section reuses the existing record. On a conflict (two students' screenshots say different times), log it and keep the first confirmed one; a correction flow will be added later.
+`meetings` is stored per section. **Catalog sections** (`sections.source = 'catalog'`, imported from SIS) are the source of truth: their meetings come only from the catalog and student input for them is ignored. **Other sections** (`source = 'student'`, e.g. a course missing from the catalog): the second student who enters the same section reuses the existing record; on a conflict, log it and keep the first one; a correction flow will be added later.
+
+## Course catalog (SIS "Tüm Ders Programı")
+
+- Page: `sis.mef.edu.tr/dersler/dersprogrami/tumprogram` — one table, columns: Ders Kodu, Ders Adı, Section, Öğretim Elemanı, Derslik / Gün / Saat (one `<br>`-separated line per slot: `A101 / Pazartesi / 09:00 - 11:50`), kontenjan, programs, prerequisites. No semester label on the page.
+- How it is pulled (manual, by the owner, decided 2026-11-10): log in to SIS yourself in Chrome, open the page, export the table to `data/mef-catalog-<term>.json` (code, name, section, instructors, slot lines only — no quota/program columns). Claude did this once through the Chrome extension in the owner's logged-in session; it never enters credentials. `data/` is gitignored.
+- Load: `pnpm db:import-catalog data/mef-catalog-2026-fall.json` (one transaction; replaces meetings of catalog sections, leaves student sections alone; safe to re-run after room/time changes).
+- 2026-2027 Fall export: 532 sections, 668 slots (SIS listed FIN 525 and FIN 526 slots twice; the parser drops exact duplicates). Courses without a fixed slot (HISTR 213, TURK 114) are not in the catalog.
+- The form looks up code + section on blur (`lookupSection` action) and shows the catalog slots read-only; manual entry only for sections not in the catalog.
 
 ## Calendar (.ics) rules
 
@@ -139,7 +147,7 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - [ ] Simple usage metrics (number of feeds, number of events) — without personal data
 
 ### Phase 6 — Later (before presenting to the school)
-- [ ] Full course catalog (manually run scraper) → validate AI output and apply room changes in bulk
+- [x] Full course catalog (manually run scraper) → moved earlier, done in Phase 1 (see "Course catalog"); still to do: use it to validate AI output in Phase 2, re-import for room changes
 - [ ] Notifications for urgent cancellations (email or web push)
 - [ ] KVKK (Turkish data protection law) privacy notice, privacy page
 - [ ] Present to the school: IT / Student Affairs — official data access, mail reading as an internal Google app, a `mef.edu.tr` subdomain
@@ -156,7 +164,8 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - Project name and domain (for now `mef-calendar.vercel.app`)
 - Finals week: answered for Fall 2026 — classes end 2026-12-11, then the project/presentation period. Should that period appear in the calendar at all?
 - How are makeup classes usually announced (same mail or separate)?
-- Meeting conflicts are only logged (Vercel logs, `meetings conflict for …`). If the first student entered wrong times, nobody can fix them yet: the correction flow is still open.
+- Meeting conflicts are only logged (Vercel logs, `meetings conflict for …`), and now only matter for sections outside the catalog. If the first student entered wrong times for such a section, nobody can fix them yet.
+- The catalog page has no semester label; the import assumes the current semester. Check the page title/filters next time for a term selector.
 - "Current semester" = the one with the latest `start_date`. Revisit when Spring is seeded before Fall ends.
 
 ## Decisions made during Phase 1
