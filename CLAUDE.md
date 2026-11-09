@@ -88,7 +88,7 @@ course_events  id, semester_id, course_code, section (null = all sections),
 - [x] Next.js + TypeScript + Tailwind + pnpm project
 - [x] Drizzle + Neon connection, first migration (`semesters`, `students`, `enrollments`, `meetings`, `course_events`)
 - [x] Vercel project, environment variables, first deploy — repo `flaney37/mef-calendar`, Vercel team "yigit n friends" (Hobby), Neon free in Frankfurt
-- [ ] Seed a 2026-2027 Fall row in `semesters` (start/end dates and public holidays — **TODO: take from the academic calendar**)
+- [x] Seed a 2026-2027 Fall row in `semesters` — `scripts/seed-semesters.mts`, run with `pnpm db:seed` (idempotent, matches by name)
 
 ### Phase 1 — Manual input → working calendar link (first end-to-end version)
 Goal: a subscription that works on a phone, by the shortest path, without AI.
@@ -141,10 +141,15 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 
 ---
 
+## Academic calendar (source: mef.edu.tr → Öğrenci İşleri → Akademik Takvim, "Lisans" sheet)
+
+- **2026-2027 Fall:** classes 2026-09-14 (Mon) → 2026-12-11 (Fri, "Derslerin Son Günü"). Holidays with no class: 2026-10-28, 2026-10-29 (Cumhuriyet Bayramı), 2026-10-30 (all three listed as full days). 2026-10-06 is an emergency drill ("Acil Durum Tatbikatı"), not a holiday. 2026-12-14 → 12-31 is the project/presentation period (no regular classes).
+- Law faculty has its own sheet ("Lisans Hukuk"); not checked.
+
 ## Open questions
-- 2026-2027 Fall semester start/end dates and holidays (academic calendar)
+- 2026-2027 Spring dates (same sheet, not read yet)
 - Project name and domain (for now `mef-calendar.vercel.app`)
-- Finals week: when do classes come off the calendar?
+- Finals week: answered for Fall 2026 — classes end 2026-12-11, then the project/presentation period. Should that period appear in the calendar at all?
 - How are makeup classes usually announced (same mail or separate)?
 - The .ics `DESCRIPTION` needs course name and instructor, but the data model has no place for them. Options: add `course_name` / `instructor` to `meetings`, or a small `sections` table (semester, code, section, name, instructor). Decide in Phase 1.
 - Course code format: store normalized without spaces (`COMP201`) and display with a space (`COMP 201`)? Needs one normalize function used everywhere.

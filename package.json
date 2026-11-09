@@ -12,7 +12,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "node --env-file=.env.local scripts/seed-semesters.mts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
