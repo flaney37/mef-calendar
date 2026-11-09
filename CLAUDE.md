@@ -108,7 +108,7 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - [x] `lib/schedule.ts`: semester + holidays + weekly meetings → list of individual sessions
 - [x] `GET /cal/[token].ics` endpoint, stable UIDs — `app/cal/[token]/route.ts`, pure `lib/feed.ts` + `lib/ics.ts`
 - [x] Vitest: skipping holidays, semester boundaries, UID stability, time zone (tests run with `TZ=America/Los_Angeles`)
-- [ ] `/edit/[editToken]` page (the link is shown after saving but 404s until this exists)
+- [x] `/edit/[editToken]` page — same form pre-filled; save keeps the feed URL; "Bağlantımı yenile" (new feed token, old one 404s) and "Kaydımı sil" (deletes student + enrollments). For a non-catalog section the editor may change its slots only if no other student is in it; otherwise the existing slots are kept and the form warns.
 - [ ] **Acceptance:** I enter my own schedule and can subscribe in Apple Calendar (Mac + iPhone); classes appear on the right day and time
   - 2026-11-10 iPhone ✅ (one course, COMP 201): right day/time/room, no duplicates after refresh, 26 Oct shown and 28–30 Oct skipped, nothing after 11 Dec, no "(GMT)" after the VTIMEZONE switch. Mac ✅ (File → New Calendar Subscription, every Monday incl. 26 Oct). Still to do: full schedule.
 
@@ -165,6 +165,7 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - Finals week: answered for Fall 2026 — classes end 2026-12-11, then the project/presentation period. Should that period appear in the calendar at all?
 - How are makeup classes usually announced (same mail or separate)?
 - Meeting conflicts are only logged (Vercel logs, `meetings conflict for …`), and now only matter for sections outside the catalog. If the first student entered wrong times for such a section, nobody can fix them yet.
+- **Look at later:** a student-entered section `STAT101-2` ("Statics", instructor given) exists in the DB but not in the Fall 2026 catalog. Wrong code, or a course the catalog misses?
 - The catalog page has no semester label; the import assumes the current semester. Check the page title/filters next time for a term selector.
 - "Current semester" = the one with the latest `start_date`. Revisit when Spring is seeded before Fall ends.
 
@@ -172,6 +173,8 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 
 - Course name and instructor live in a `sections` table (per section, not per meeting).
 - Course codes are stored as `COMP201` (`normalizeCourseCode`: strip spaces, ASCII uppercase — not Turkish locale, which would turn "histr" into "HİSTR") and shown as `COMP 201` (`displayCourseCode`). Sections drop leading zeros ("01" → "1"). All in `lib/course-code.ts`.
+- `/edit/[editToken]` streams its content inside `<Suspense>` (Next 16 Cache Components), so an unknown token shows the not-found page with HTTP 200, not 404. Fine: nothing leaks. The page sets `robots: noindex` and `referrer: no-referrer`.
+- Feeds are sent with `max-age=300`, so after a link rotation or delete, a calendar app or browser may still show the old feed for up to 5 minutes.
 - `.ics` event times are written as `DTSTART;TZID=Europe/Istanbul:…` with a fixed +03:00 `VTIMEZONE` block (only `DTSTAMP` is UTC, as RFC 5545 requires). First version used UTC `…Z` times; iPhone then showed "09:00 (06:00 GMT)" on every event. UIDs did not change with the switch.
 
 ## Environment notes (learned during setup)

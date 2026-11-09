@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { loadFeedData } from "@/lib/db/queries";
 import { buildFeed } from "@/lib/feed";
-import { truncateToken } from "@/lib/token";
+import { TOKEN_PATTERN, truncateToken } from "@/lib/token";
 
 // The URL is /cal/<token>.ics, so the [token] segment arrives as "<token>.ics".
 const feedFileSchema = z
   .string()
-  .regex(/^[A-Za-z0-9_-]{32}\.ics$/)
-  .transform((file) => file.slice(0, -".ics".length));
+  .endsWith(".ics")
+  .transform((file) => file.slice(0, -".ics".length))
+  .pipe(z.string().regex(TOKEN_PATTERN));
 
 // Runs on every request: the database query keeps Next from prerendering it.
 export async function GET(_request: Request, ctx: RouteContext<"/cal/[token]">) {

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { CatalogLookup } from "@/lib/db/queries";
+import type { CatalogLookup, EditCourse } from "@/lib/db/queries";
 import { scheduleSchema } from "@/lib/schedule-input";
-import { createSchedule, lookupSection } from "./actions";
+import { createSchedule, lookupSection, updateSchedule } from "./actions";
+import { FeedLinks, inputClass } from "./feed-links";
+import { displayCourseCode } from "@/lib/course-code";
 
 const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
@@ -41,13 +43,50 @@ const newCourse = (): CourseDraft => ({
 
 const isUntouchedSlot = (s: SlotDraft) => !s.startTime && !s.endTime && !s.room;
 
-const inputClass =
-  "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900";
+// A saved course, as the edit page loads it, turned back into form state.
+function toDraft(course: EditCourse): CourseDraft {
+  const base = { ...newCourse(), code: course.code, section: course.section };
+  if (course.source === "catalog") {
+    return {
+      ...base,
+      slots: [],
+      catalog: { found: true, courseName: course.courseName, instructor: course.instructor, slots: course.slots },
+    };
+  }
+  return {
+    ...base,
+    courseName: course.courseName ?? "",
+    instructor: course.instructor ?? "",
+    slots: course.slots.map((s) => ({
+      id: nextId++,
+      weekday: String(s.weekday),
+      startTime: s.startTime.slice(0, 5),
+      endTime: s.endTime.slice(0, 5),
+      room: s.room ?? "",
+    })),
+  };
+}
 
-export function ScheduleForm() {
-  const [courses, setCourses] = useState<CourseDraft[]>(() => [newCourse()]);
+// Without editToken: creates a new student. With it: edits that student's
+// courses in place (the feed link stays the same).
+export function ScheduleForm({
+  editToken,
+  initialCourses,
+}: {
+  editToken?: string;
+  initialCourses?: EditCourse[];
+}) {
+  const [courses, setCourses] = useState<CourseDraft[]>(() =>
+    initialCourses && initialCourses.length > 0 ? initialCourses.map(toDraft) : [newCourse()],
+  );
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ feedToken: string; editToken: string } | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [kept, setKept] = useState<string[]>([]);
+  const [result, setResult] = useState<{
+    feedToken: string;
+    editToken: string;
+    keptCourses: string[];
+  } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const updateCourse = (id: number, patch: Partial<CourseDraft>) =>
@@ -100,19 +139,32 @@ export function ScheduleForm() {
       return;
     }
     setError(null);
+    setSaved(false);
     startTransition(async () => {
       // Send the raw form values, not parsed.data: the server parses them
       // again, and its schema expects the form's strings, not parsed output.
-      const res = await createSchedule(payload());
-      if (res.ok) setResult(res);
-      else setError(res.error);
+      if (editToken) {
+        const res = await updateSchedule(editToken, payload());
+        if (res.ok) {
+          setSaved(true);
+          setKept(res.keptCourses);
+        } else setError(res.error);
+      } else {
+        const res = await createSchedule(payload());
+        if (res.ok) setResult(res);
+        else setError(res.error);
+      }
     });
   }
 
   if (result) return <Result {...result} />;
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4">
+    <form
+      onSubmit={submit}
+      onChange={() => setSaved(false)}
+      className="flex flex-col gap-4"
+    >
       {courses.map((course, index) => (
         <fieldset
           key={course.id}
@@ -183,13 +235,19 @@ export function ScheduleForm() {
           {error}
         </p>
       )}
+      {saved && (
+        <p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">
+          ✓ Kaydedildi. Takvimin bir sonraki yenilemede güncellenecek.
+        </p>
+      )}
+      {saved && <KeptWarning courses={kept} />}
 
       <button
         type="submit"
         disabled={pending}
         className="rounded-md bg-zinc-900 py-3 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
       >
-        {pending ? "Kaydediliyor…" : "Takvimimi oluştur"}
+        {pending ? "Kaydediliyor…" : editToken ? "Değişiklikleri kaydet" : "Takvimimi oluştur"}
       </button>
     </form>
   );
@@ -321,45 +379,31 @@ function ManualEntry({
   );
 }
 
-function CopyRow({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
+function KeptWarning({ courses }: { courses: string[] }) {
+  if (courses.length === 0) return null;
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-sm font-medium">{label}</span>
-      <div className="flex gap-2">
-        <input readOnly value={value} className={`${inputClass} font-mono text-sm`} />
-        <button
-          type="button"
-          onClick={async () => {
-            await navigator.clipboard.writeText(value);
-            setCopied(true);
-          }}
-          className="shrink-0 rounded-md border border-zinc-300 px-3 text-sm dark:border-zinc-700"
-        >
-          {copied ? "Kopyalandı" : "Kopyala"}
-        </button>
-      </div>
-    </div>
+    <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">
+      {courses.map(displayCourseCode).join(", ")}: girdiğin saatler kullanılmadı. Bu şubenin
+      saatleri başka öğrenciler tarafından da kullanılıyor ve farklı girilmiş. Takviminde mevcut
+      saatler görünecek; yanlışsa bize haber ver.
+    </p>
   );
 }
 
-function Result({ feedToken, editToken }: { feedToken: string; editToken: string }) {
-  const { host, origin } = window.location;
-  const webcal = `webcal://${host}/cal/${feedToken}.ics`;
-  const https = `${origin}/cal/${feedToken}.ics`;
-  const edit = `${origin}/edit/${editToken}`;
-
+function Result({
+  feedToken,
+  editToken,
+  keptCourses,
+}: {
+  feedToken: string;
+  editToken: string;
+  keptCourses: string[];
+}) {
   return (
     <div className="flex flex-col gap-5">
       <h2 className="text-xl font-semibold">Takvimin hazır 🎉</h2>
-      <a
-        href={webcal}
-        className="rounded-md bg-zinc-900 py-3 text-center font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        iPhone / Mac: Takvime abone ol
-      </a>
-      <CopyRow label="Google Takvim / Outlook için bağlantı" value={https} />
-      <CopyRow label="Düzenleme bağlantısı" value={edit} />
+      <KeptWarning courses={keptCourses} />
+      <FeedLinks feedToken={feedToken} editToken={editToken} />
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         Bu bağlantıları bir yere kaydet. Hesap olmadığı için kaybedersen geri getiremeyiz.
         Bağlantıyı bilen herkes takvimini görebilir, kimseyle paylaşma.

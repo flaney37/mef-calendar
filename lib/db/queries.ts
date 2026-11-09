@@ -66,6 +66,73 @@ export async function lookupCatalogSection(
   return { found: true, courseName: match.courseName, instructor: match.instructor, slots };
 }
 
+export type EditCourse = {
+  code: string;
+  section: string;
+  source: "catalog" | "student";
+  courseName: string | null;
+  instructor: string | null;
+  slots: { weekday: number; startTime: string; endTime: string; room: string | null }[];
+};
+
+// The student's saved courses for the edit page, or null for an unknown token.
+export async function loadEditData(editToken: string) {
+  const [student] = await db
+    .select({ id: students.id, semesterId: students.semesterId, feedToken: students.feedToken })
+    .from(students)
+    .where(eq(students.editToken, editToken))
+    .limit(1);
+  if (!student) return null;
+
+  const sameSection = (table: typeof meetings | typeof sections) =>
+    and(
+      eq(table.semesterId, student.semesterId),
+      eq(table.courseCode, enrollments.courseCode),
+      eq(table.section, enrollments.section),
+    );
+
+  const [courseRows, slotRows] = await Promise.all([
+    db
+      .select({
+        code: enrollments.courseCode,
+        section: enrollments.section,
+        source: sections.source,
+        courseName: sections.courseName,
+        instructor: sections.instructor,
+      })
+      .from(enrollments)
+      .leftJoin(sections, sameSection(sections))
+      .where(eq(enrollments.studentId, student.id))
+      .orderBy(enrollments.courseCode),
+    db
+      .select({
+        code: meetings.courseCode,
+        section: meetings.section,
+        weekday: meetings.weekday,
+        startTime: meetings.startTime,
+        endTime: meetings.endTime,
+        room: meetings.room,
+      })
+      .from(meetings)
+      .innerJoin(enrollments, sameSection(meetings))
+      .where(eq(enrollments.studentId, student.id))
+      .orderBy(meetings.weekday, meetings.startTime),
+  ]);
+
+  const courses: EditCourse[] = courseRows.map((c) => ({
+    code: c.code,
+    section: c.section,
+    source: c.source ?? "student",
+    courseName: c.courseName,
+    instructor: c.instructor,
+    slots: slotRows
+      .filter((s) => s.code === c.code && s.section === c.section)
+      .map(({ weekday, startTime, endTime, room }) => ({ weekday, startTime, endTime, room })),
+  }));
+
+  return { feedToken: student.feedToken, courses };
+}
+
 // Everything needed to build one student's feed, or null for an unknown token.
 export async function loadFeedData(feedToken: string): Promise<Omit<FeedInput, "now"> | null> {
   const [student] = await db
