@@ -1,6 +1,6 @@
 # mef-calendar
 
-An automatic class calendar for MEF University students. A student uploads a screenshot of their SIS class schedule, gets a personal calendar subscription link (.ics), and subscribes to it in Apple / Google / Outlook Calendar. When class cancellations, exam dates or room changes are entered into the system (later: picked up automatically from emails), everyone's calendar updates on its own.
+An automatic class calendar for MEF University students. A student uploads a screenshot of their SIS class schedule (read on their own device), gets a personal calendar subscription link (.ics), and subscribes to it in Apple / Google / Outlook Calendar. When class cancellations, exam dates or room changes are entered into the system (later: picked up automatically from emails), everyone's calendar updates on its own.
 
 Goal: first a zero-cost MVP (my own class + friends), then offer it to the school as a free service. No SaaS / sales goal.
 
@@ -9,9 +9,9 @@ Goal: first a zero-cost MVP (my own class + friends), then offer it to the schoo
 ## Core decisions (ask before changing)
 
 - **No accounts.** A student is identified by a random, unguessable token (at least 128 bits, URL-safe). Calendar link: `/cal/<token>.ics`. A separate secret link for editing: `/edit/<editToken>`.
-- **Schedule input = screenshot + crop.** The student uploads a screenshot of the "Ders Programı" (class schedule) page in SIS and, in the browser, crops **only the weekly grid + the course list below it**. Only the cropped image is sent to the server and to the AI.
-- **Image reading = Gemini free tier** (current Flash model, structured JSON output). Because free-tier data may be used by Google, cropping is mandatory and the server performs a second check as well (see Privacy below).
-- **AI output is always confirmed by the student.** Before saving, an editable "review" screen is shown.
+- **Schedule input = screenshot, read in the browser.** The student picks a screenshot of the "Ders Programı" (class schedule) page in SIS. OCR runs **on the student's device** and only the course codes + sections found in it are sent to the server. Section times come from the course catalog, so the image only needs to yield code + section.
+- **Image reading = Tesseract.js in the browser** (decided 2026-11-10, replaces "Gemini free tier"). Reasons: the image never leaves the device (no TC Kimlik No can reach any server or Google), no API key, no quota, no cost. OCR mistakes are corrected against the catalog.
+- **OCR output is always confirmed by the student.** Before saving, an editable "review" screen is shown.
 - **Sharing key = course code + section** (`COMP 201` + `1` → `COMP201-1`). Events such as cancellations/exams are attached to a section (or to the whole course) and show up in the calendar of everyone who selected that section.
 - **Never log into SIS automatically with anyone's credentials.** A scraper / course catalog may be added later, only as a manually run tool.
 
@@ -20,15 +20,14 @@ Goal: first a zero-cost MVP (my own class + friends), then offer it to the schoo
 - **Next.js** (App Router, TypeScript, strict) — on Vercel, free plan
 - **Postgres** — Neon via the Vercel Marketplace (free plan), ORM: **Drizzle**
 - **Tailwind CSS** — UI
-- **Cropping:** `react-easy-crop` (or similar, client-side)
-- **Image reading:** `@google/genai` (Gemini API), with a JSON schema
+- **Image reading:** `tesseract.js` (WebAssembly OCR, runs in a Web Worker in the browser)
 - **Tests:** Vitest (especially for .ics generation and date calculations)
 - Package manager: pnpm
 
 Environment variables (`.env.local`, never commit):
 ```
 DATABASE_URL=
-GEMINI_API_KEY=
+GEMINI_API_KEY=          # only if Phase 4's mail parser needs an LLM fallback
 ADMIN_PASSWORD=          # for the fallback panel in Phase 3
 INGEST_SECRET=           # for the mail scripts in Phase 4
 ```
@@ -76,18 +75,17 @@ course_events  id, semester_id, course_code, section (null = all sections),
 
 ## Privacy rules (strict)
 
-- The top of the SIS page contains the **national ID number (TC Kimlik No), first name and last name**. These are never stored, never logged, and never knowingly sent to the AI.
-- Cropping happens in the browser; the original screenshot is never uploaded to the server.
-- The server holds the cropped image **in memory only**, sends it to Gemini and discards it. The image is never written to disk or the database.
-- The Gemini prompt asks only for the class table. If the response contains an 11-digit number or a field resembling "TC Kimlik", the response is rejected and the user is asked to crop again.
-- State it clearly in the UI (in Turkish): "Crop out the top part that contains your ID number. The image is not stored; it is deleted after being read."
+- The top of the SIS page contains the **national ID number (TC Kimlik No), first name and last name**. These are never stored, never logged, and never sent anywhere.
+- The screenshot and the full OCR text **never leave the browser**: no upload, no API call, no analytics, no `console.log` of OCR text. Only the extracted `{code, section}` pairs go to the server (through the normal review form).
+- `lib/extract.ts` keeps only lines that look like a course row (course code + section); everything else in the OCR text (names, ID numbers, advisor) is discarded before it reaches React state.
+- State it clearly in the UI (in Turkish): the image is read on your own device and is not uploaded anywhere.
 - Tokens are truncated in logs (`abc1…`).
 
 ## Coding conventions
 
 - UI text in Turkish; code, variable names and commit messages in English.
 - Date/time logic lives in a single module (`lib/schedule.ts`) and is tested.
-- Everything sent to/received from Gemini lives in `lib/extract.ts`; returned data is validated with a **Zod** schema.
+- Turning OCR text into courses lives in `lib/extract.ts`: pure functions, no OCR or DOM imports, tested with real OCR output.
 - Input to Server Actions and Route Handlers is always validated with Zod.
 - Small, frequent commits. At the end of every phase, deploy to Vercel and test the subscription on a real phone.
 
@@ -114,13 +112,12 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
   - 2026-11-10 full schedule ✅: 7 courses (5 from the catalog, HISTR 213 / TURK 114 without slots), 98 events; the week of 9–13 Nov in Apple Calendar matches the SIS weekly grid exactly (days, times, rooms).
 
 ### Phase 2 — Import from screenshot
-- [ ] Upload screen (including phone camera/gallery)
-- [ ] Client-side cropping, guide text and an example image ("select only this part")
-- [ ] `POST /api/extract`: cropped image → Gemini → course list validated with Zod (`code, name, section, weekday, start, end, room`)
-- [ ] Check that rejects responses containing ID/identity data
-- [ ] "Review" screen: the Phase 1 form, pre-filled with the AI output; the student corrects and saves
+- [ ] Spike: run Tesseract.js on a real SIS screenshot and look at the raw text
+- [ ] `lib/extract.ts`: OCR text → `{code, section}` list; fix OCR confusions (O/0, I/1, S/5…) by matching against the catalog; Vitest with real OCR output
+- [ ] Upload screen (phone gallery / desktop file), short guide text; OCR in a Web Worker, lazy-loaded so the main page stays light
+- [ ] "Review" screen: the Phase 1 form, pre-filled with the OCR result (catalog fills the times); the student corrects and saves
 - [ ] Courses without a time slot (e.g. HISTR 213, TURK 114): not put on the calendar but kept in `enrollments`
-- [ ] Error cases: Gemini quota exceeded / unreadable → fall back to the manual input form
+- [ ] Error cases: OCR finds nothing / fails to load → fall back to the manual input form
 - [ ] **Acceptance:** I upload my own screenshot and get the correct calendar in under a minute
 
 ### Phase 3 — Cancellations, exams and room changes (manual input, fallback panel)
@@ -145,6 +142,7 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - [ ] Optional: the student adds their Blackboard calendar link; the feed merges assignments (with an option to filter noise such as "In-class:" items). The link is stored encrypted and can be deleted.
 - [ ] Mobile-friendly UI polish, subscription instructions (iPhone / Mac / Google / Outlook)
 - [ ] "Send my links by email": losing the edit link is easy (it already happened once in testing, and the only fix was a new record). Send the feed + edit links to an address the student types, **without storing the address** (the `students` table must stay free of email). Needs a free transactional email service; check the privacy rules before choosing one.
+- [ ] Screenshot-only warning on the upload screen: tell students clearly to upload a **screenshot**, not a camera photo of a screen (OCR is much less accurate on photos). Could also detect likely photos (EXIF camera data, size/aspect) and warn.
 - [ ] Optional terminal-style theme (and a light/dark toggle): move hard-coded Tailwind colors to CSS variables first. Owner showed a mockup on 2026-11-10; no command line or personal events, only the look.
 - [ ] Pilot: my own section + 10-20 friends, 2-3 weeks; collect feedback
 - [ ] Simple usage metrics (number of feeds, number of events) — without personal data
