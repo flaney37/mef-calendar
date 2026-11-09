@@ -102,6 +102,7 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - [x] Vitest: skipping holidays, semester boundaries, UID stability, time zone (tests run with `TZ=America/Los_Angeles`)
 - [ ] `/edit/[editToken]` page (the link is shown after saving but 404s until this exists)
 - [ ] **Acceptance:** I enter my own schedule and can subscribe in Apple Calendar (Mac + iPhone); classes appear on the right day and time
+  - 2026-11-10 iPhone ✅ (one course, COMP 201): right day/time/room, no duplicates after refresh, 26 Oct shown and 28–30 Oct skipped, nothing after 11 Dec, no "(GMT)" after the VTIMEZONE switch. Still to do: Mac check, full schedule.
 
 ### Phase 2 — Import from screenshot
 - [ ] Upload screen (including phone camera/gallery)
