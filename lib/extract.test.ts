@@ -34,6 +34,21 @@ MATH 211 Linear Algebra 3 MUSTAFA LUTFI OVEGCOGLU 6.0
 TURK 114 Turkish Language and Literature II 1 IPEK SAHBENDEROGLU 20
 `;
 
+// Full-page desktop screenshot (1280 px wide, whole SIS page with lots of
+// white space) upscaled 3x: codes fine, but sections and credits garbled
+// (1 → ' or |], credits → [1, ao, LT]) and HISTR read as HSTR.
+const OCR_FULL_PAGE = `
+DERS KODU DERS ADI SECTION OGRETIM ELEMANI KREDI
+COMP 201 Data Structures and Algorms 1 YASSINE DRIAS [1
+COMP 205 Systoms Programming 2 ADEM KARAMOCA ao
+ECON 114 Economics for Engineering ' MURAT DONDURAN 40
+EE 203 Digital Systems Design 3 OMER USTA 60
+HSTR213 Pranciples of Alaturk and Hastory of fe Turkish Reputée | |] HAYVA KARAGOZ 20
+MATH 211 Lines Algotra 3 MUSTAFA LUTFI OVEGOGLY LT]
+TURK 114 Turkish Language and Litersture || 1 IPEK SAMBENDEROGLUY 20
+= 4
+`;
+
 // A slice of the real catalog, with look-alikes that must not win.
 const catalog: CatalogEntry[] = [
   { courseCode: "COMP201", section: "1", courseName: "Data Structures and Algorithms" },
@@ -85,6 +100,29 @@ describe("findCourseRows", () => {
     expect(rows.find((r) => r.name === "Linear Algebra")?.section).toBe("3");
   });
 
+  it("survives garbled sections and credits", () => {
+    const rows = findCourseRows(OCR_FULL_PAGE);
+    expect(rows.map((r) => `${r.code}-${r.section}`)).toEqual([
+      "COMP201-1",
+      "COMP205-2",
+      "ECON114-1", // section read as '
+      "EE203-3",
+      "HSTR213-1", // section read as |]; prefix is fixed later, against the catalog
+      "MATH211-3",
+      "TURK114-1", // "Literature II" read as "Litersture ||", then the real 1
+    ]);
+    expect(rows.find((r) => r.code === "ECON114")?.name).toBe("Economics for Engineering");
+  });
+
+  it("does not take a number from the instructor or credit columns as the section", () => {
+    const [row] = findCourseRows("DERS KODU\nCOMP 205 Systems Programming 2 ADEM KARAHOCA 40\n");
+    expect(row.section).toBe("2");
+  });
+
+  it("skips a row whose section can't be found at all", () => {
+    expect(findCourseRows("DERS KODU\nCOMP 205 Systems Programming ADEM KARAHOCA\n")).toEqual([]);
+  });
+
   it("keeps nothing but code, section and course name", () => {
     for (const row of findCourseRows(OCR_UPSCALED)) {
       expect(Object.keys(row).sort()).toEqual(["code", "name", "section"]);
@@ -118,6 +156,11 @@ describe("matchToCatalog", () => {
     // coup 201 → COMP201, eE209 → EE203 (section 3, not 1), wa 211 → MATH211
     expect(matched.find((c) => c.code === "EE203")?.match).toBe("name");
     expect(matched.find((c) => c.code === "MATH211")?.match).toBe("name");
+  });
+
+  it("fixes a misread department prefix, also for courses outside the catalog", () => {
+    const matched = matchToCatalog(findCourseRows(OCR_FULL_PAGE), catalog);
+    expect(strip(matched)).toEqual(expected); // HSTR213 → HISTR213
   });
 
   it("does not guess when the name matches nothing", () => {

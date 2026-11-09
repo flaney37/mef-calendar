@@ -14,7 +14,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "node --env-file=.env.local scripts/seed-semesters.mts",
-    "db:import-catalog": "tsx --env-file=.env.local scripts/import-catalog.mts"
+    "db:import-catalog": "tsx --env-file=.env.local scripts/import-catalog.mts",
+    "ocr:debug": "tsx scripts/ocr-debug.mts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

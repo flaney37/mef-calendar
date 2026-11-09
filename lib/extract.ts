@@ -25,19 +25,53 @@ export type CatalogEntry = { courseCode: string; section: string; courseName: st
 export type MatchedCourse = {
   code: string;
   section: string;
-  // "code": code + section found in the catalog as read.
+  // "code": code + section found in the catalog (as read, or after fixing
+  // a misread department prefix like "COUP" → "COMP").
   // "name": code fixed using the course name. "none": not in the catalog
   // (e.g. HISTR 213, which has no fixed slot) — kept as read.
   match: "code" | "name" | "none";
 };
 
-// A course-list row: CODE NAME SECTION INSTRUCTOR CREDIT, e.g.
+// A course-list row is CODE NAME SECTION INSTRUCTOR CREDIT, e.g.
 //   "COMP 201 Data Structures and Algorithms 1 YASSINE DRIAS 6.0"
-//   "HISTR 213 Principles of … Republic | 1 HAVVA KARAGOZ 2.0"
-// Section is the last 1–2 digit number before the instructor's name, and
-// the row ends with the credit (OCR sometimes drops its dot: "20").
-const ROW_PATTERN =
-  /^\s*([A-Za-z0-9]{2,6}(?:\/[A-Za-z0-9]{2,6})?)\s?([0-9OoIlSZB]{3,4}[A-Za-z]?)\s+(.+?)\s*\|?\s+(\d{1,2})\s+(\D+?)\s+\d{1,2}(?:[.,]\d)?\s*$/;
+// Real OCR output is messier, so only the start is matched strictly:
+//   "ECON 114 Economics for Engineering ' MURAT DONDURAN 40"   (1 read as ')
+//   "MATH 211 Lines Algotra 3 MUSTAFA LUTFI OVEGOGLY LT]"     (credit garbled)
+// The credit column is ignored; the section is found between the course
+// name and the instructor's name (see splitRest).
+const ROW_START = /^\s*([A-Za-z0-9]{2,6}(?:\/[A-Za-z0-9]{2,6})?)\s?([0-9OoIlSZB]{3,4}[A-Za-z]?)\s+(.*)$/;
+
+// "1" is a thin glyph and often comes out as one of these.
+const LOOKS_LIKE_ONE = /^[|lI'!\][]{1,2}$/;
+const DIGITS = /^\d{1,2}$/;
+// Instructor names are written in capitals (YASSINE DRIAS, ÖMER USTA).
+const ALL_CAPS_WORD = /^[A-ZÇĞİÖŞÜ]{3,}$/;
+
+// Text after the code → course name + section. null if no section is found.
+function splitRest(rest: string): { name: string; section: string } | null {
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  // The instructor starts at the first all-caps word after the name.
+  const instructor = tokens.findIndex((t, i) => i > 0 && ALL_CAPS_WORD.test(t));
+  const region = instructor > 0 ? tokens.slice(0, instructor) : tokens;
+
+  // Before the instructor: the section is the last number (a course name
+  // can end in a roman numeral read as "||", so digits win over look-alikes).
+  // Without a known instructor, credits may follow, so take the first one.
+  const pick = (test: RegExp) => {
+    const indexes = region.map((t, i) => (test.test(t) && i > 0 ? i : -1)).filter((i) => i >= 0);
+    return instructor > 0 ? indexes.at(-1) : indexes[0];
+  };
+  const at = pick(DIGITS) ?? pick(LOOKS_LIKE_ONE);
+  if (at === undefined) return null;
+
+  // Drop stray table borders (| ] ') from the name, but keep letters:
+  // "II" in "Literature II" is part of the name.
+  const name = region
+    .slice(0, at)
+    .filter((t) => !/^[|'!\][]+$/.test(t))
+    .join(" ");
+  return { name, section: DIGITS.test(region[at]) ? region[at] : "1" };
+}
 
 // OCR swaps look-alike characters. Letters belong in the prefix, digits in
 // the number, so each part is pushed toward the expected kind.
@@ -61,14 +95,16 @@ export function findCourseRows(ocrText: string): OcrRow[] {
   const seen = new Set<string>();
 
   for (const line of lines.slice(header + 1)) {
-    const m = ROW_PATTERN.exec(line);
+    const m = ROW_START.exec(line);
     if (!m) continue;
+    const rest = splitRest(m[3]);
+    if (!rest) continue;
     const code = cleanCode(m[1], m[2]);
-    const section = normalizeSection(m[4]);
+    const section = normalizeSection(rest.section);
     const key = `${code}-${section}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    rows.push({ code, section, name: m[3].trim() });
+    rows.push({ code, section, name: rest.name });
   }
   return rows;
 }
@@ -101,10 +137,50 @@ export function similarity(a: string, b: string): number {
 // Below this, a name match is not trusted and the row is kept as read.
 const NAME_MATCH_THRESHOLD = 0.7;
 
+// Departments of courses without a fixed slot, which never appear in the
+// catalog but do appear in students' course lists.
+const NON_CATALOG_PREFIXES = ["HISTR", "TURK"];
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const old = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = old;
+    }
+  }
+  return row[b.length];
+}
+
+// "HSTR213" → "HISTR213": snap an unknown department prefix to the closest
+// known one, if it is only a letter or so away.
+function fixPrefix(code: string, prefixes: Set<string>): string {
+  const m = /^([A-Z/]+)(.*)$/.exec(code);
+  if (!m || prefixes.has(m[1])) return code;
+  let best: string | null = null;
+  let bestDistance = m[1].length >= 4 ? 2 : 1;
+  for (const p of prefixes) {
+    const d = editDistance(m[1], p);
+    if (d < bestDistance || (d === bestDistance && best === null)) {
+      best = p;
+      bestDistance = d;
+    }
+  }
+  return best ? best + m[2] : code;
+}
+
 export function matchToCatalog(rows: OcrRow[], catalog: CatalogEntry[]): MatchedCourse[] {
   const byKey = new Set(catalog.map((c) => `${c.courseCode}-${c.section}`));
+  const prefixes = new Set([
+    ...catalog.map((c) => /^[A-Z/]+/.exec(c.courseCode)?.[0] ?? ""),
+    ...NON_CATALOG_PREFIXES,
+  ]);
 
-  return rows.map((row) => {
+  return rows.map((read) => {
+    const row = { ...read, code: fixPrefix(read.code, prefixes) };
     if (byKey.has(`${row.code}-${row.section}`)) {
       return { code: row.code, section: row.section, match: "code" };
     }
