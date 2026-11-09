@@ -42,13 +42,13 @@ describe("buildFeed", () => {
   it("puts course name, section and instructor in the description", () => {
     const [first] = events(buildFeed(input));
     expect(first).toContain(
-      "DESCRIPTION:Data Structures\\nŞube: 1\\nÖğretim üyesi: Ayşe Yılmaz\r\n",
+      "DESCRIPTION:Data Structures\\nSection: 1\\nÖğretim üyesi: Ayşe Yılmaz\r\n",
     );
   });
 
   it("still works when the section has no name or instructor", () => {
     const [first] = events(buildFeed({ ...input, sections: [] }));
-    expect(first).toContain("DESCRIPTION:Şube: 1\r\n");
+    expect(first).toContain("DESCRIPTION:Section: 1\r\n");
   });
 
   it("returns an empty calendar for a student with no timed courses", () => {

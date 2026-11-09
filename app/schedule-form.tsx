@@ -197,7 +197,7 @@ export function ScheduleForm({
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              Şube
+              Section
               <input
                 className={inputClass}
                 placeholder="1"
@@ -286,7 +286,7 @@ function ManualEntry({
       {course.catalog && !course.catalog.found && (
         <p className="text-sm text-amber-700 dark:text-amber-400">
           {others.length > 0
-            ? `Ders programında bu şube yok. Bu dersin şubeleri: ${others.join(", ")}.`
+            ? `Ders programında bu section yok. Bu dersin section'ları: ${others.join(", ")}.`
             : "Ders programında yok. Sabit saati varsa elle gir, yoksa boş bırak."}
         </p>
       )}
@@ -383,7 +383,7 @@ function KeptWarning({ courses }: { courses: string[] }) {
   if (courses.length === 0) return null;
   return (
     <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">
-      {courses.map(displayCourseCode).join(", ")}: girdiğin saatler kullanılmadı. Bu şubenin
+      {courses.map(displayCourseCode).join(", ")}: girdiğin saatler kullanılmadı. Bu section&apos;ın
       saatleri başka öğrenciler tarafından da kullanılıyor ve farklı girilmiş. Takviminde mevcut
       saatler görünecek; yanlışsa bize haber ver.
     </p>

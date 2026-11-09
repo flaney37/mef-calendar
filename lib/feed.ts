@@ -26,7 +26,7 @@ const sectionKey = (courseCode: string, section: string) => `${courseCode}-${sec
 function describe(session: Session, info: SectionInfo | undefined): string {
   const lines = [];
   if (info?.courseName) lines.push(info.courseName);
-  lines.push(`Şube: ${session.section}`);
+  lines.push(`Section: ${session.section}`);
   if (info?.instructor) lines.push(`Öğretim üyesi: ${info.instructor}`);
   return lines.join("\n");
 }

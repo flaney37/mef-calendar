@@ -85,7 +85,7 @@ export function ScreenshotImport({ onCourses }: { onCourses: (courses: EditCours
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         SIS → Ders Programı sayfasının ekran görüntüsünü seç. Görüntü{" "}
         <strong>kendi cihazında okunur</strong>, hiçbir yere yüklenmez; sadece bulunan ders kodları
-        ve şubeler kullanılır.
+        ve section&apos;lar kullanılır.
       </p>
       <label className="self-start cursor-pointer rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700">
         {status.kind === "reading" ? "Okunuyor…" : "Ekran görüntüsü seç"}

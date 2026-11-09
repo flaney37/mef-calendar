@@ -19,7 +19,7 @@ const event: IcsEvent = {
   end: new Date("2026-09-14T07:50:00Z"),
   summary: "COMP 201",
   location: "5-101",
-  description: "Data Structures\nŞube: 1",
+  description: "Data Structures\nSection: 1",
 };
 
 describe("formatUtc", () => {
@@ -127,7 +127,7 @@ describe("buildCalendar", () => {
         "DTEND;TZID=Europe/Istanbul:20260914T105000",
         "SUMMARY:COMP 201",
         "LOCATION:5-101",
-        "DESCRIPTION:Data Structures\\nŞube: 1",
+        "DESCRIPTION:Data Structures\\nSection: 1",
         "END:VEVENT",
       ]),
     );

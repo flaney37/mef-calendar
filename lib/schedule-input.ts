@@ -40,7 +40,7 @@ export const courseSchema = z.object({
   section: z
     .string()
     .transform(normalizeSection)
-    .pipe(z.string().regex(/^[A-Z0-9]{1,3}$/, "Şube 1, 2 gibi olmalı")),
+    .pipe(z.string().regex(/^[A-Z0-9]{1,3}$/, "Section 1, 2 gibi olmalı")),
   courseName: optionalText(120),
   instructor: optionalText(120),
   // Courses like HISTR 213 have no fixed slot: kept as an enrollment only.
