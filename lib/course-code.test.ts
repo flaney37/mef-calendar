@@ -17,7 +17,7 @@ describe("normalizeCourseCode", () => {
 });
 
 describe("COURSE_CODE_PATTERN", () => {
-  it.each(["COMP201", "HISTR213", "TURK114", "PHYS101L", "MATH1001"])("accepts %s", (code) => {
+  it.each(["COMP201", "HISTR213", "TURK114", "PHYS101L", "MATH1001", "POLS/IR200"])("accepts %s", (code) => {
     expect(COURSE_CODE_PATTERN.test(code)).toBe(true);
   });
 
@@ -30,6 +30,7 @@ describe("displayCourseCode", () => {
   it("adds a space between letters and digits", () => {
     expect(displayCourseCode("COMP201")).toBe("COMP 201");
     expect(displayCourseCode("PHYS101L")).toBe("PHYS 101L");
+    expect(displayCourseCode("POLS/IR200")).toBe("POLS/IR 200");
   });
 });
 

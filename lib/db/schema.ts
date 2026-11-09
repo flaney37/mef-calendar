@@ -55,6 +55,11 @@ export const enrollments = pgTable(
   (t) => [primaryKey({ columns: [t.studentId, t.courseCode] })],
 );
 
+// "catalog": imported from the SIS catalog, authoritative — its meetings are
+// never changed by student input. "student": entered by a student because
+// the section is not in the catalog.
+export const sectionSource = pgEnum("section_source", ["catalog", "student"]);
+
 // Per-section facts that don't depend on the day: course name, instructor.
 // Shared by every student in the section, like meetings.
 export const sections = pgTable(
@@ -68,6 +73,7 @@ export const sections = pgTable(
     section: text("section").notNull(),
     courseName: text("course_name"),
     instructor: text("instructor"),
+    source: sectionSource("source").notNull().default("student"),
   },
   (t) => [uniqueIndex("sections_key_idx").on(t.semesterId, t.courseCode, t.section)],
 );

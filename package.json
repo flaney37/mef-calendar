@@ -13,7 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "node --env-file=.env.local scripts/seed-semesters.mts"
+    "db:seed": "node --env-file=.env.local scripts/seed-semesters.mts",
+    "db:import-catalog": "tsx --env-file=.env.local scripts/import-catalog.mts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
@@ -33,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.1.0"
   },

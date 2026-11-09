@@ -8,11 +8,12 @@ export function normalizeCourseCode(input: string): string {
   return input.replace(/\s+/g, "").toUpperCase();
 }
 
-// Letters then digits (+ optional trailing letter), e.g. COMP201, HISTR213, PHYS101L.
-export const COURSE_CODE_PATTERN = /^[A-Z]{2,6}\d{3,4}[A-Z]?$/;
+// Letters then digits (+ optional trailing letter), e.g. COMP201, HISTR213,
+// PHYS101L. Cross-listed courses join two prefixes with a slash: POLS/IR200.
+export const COURSE_CODE_PATTERN = /^[A-Z]{2,6}(\/[A-Z]{2,6})?\d{3,4}[A-Z]?$/;
 
 export function displayCourseCode(code: string): string {
-  return code.replace(/^([A-Z]+)(\d)/, "$1 $2");
+  return code.replace(/^([A-Z/]+)(\d)/, "$1 $2");
 }
 
 // "01" and "1" are the same section; non-numeric sections are kept as-is.

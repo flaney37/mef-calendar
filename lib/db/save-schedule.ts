@@ -1,9 +1,10 @@
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import type { CourseInput, ScheduleInput } from "@/lib/schedule-input";
 import { toHHMM } from "@/lib/schedule";
 import { generateToken } from "@/lib/token";
 import { db } from "./index";
-import { meetings, sections, semesters, students, enrollments } from "./schema";
+import { currentSemesterId } from "./queries";
+import { meetings, sections, students, enrollments } from "./schema";
 
 type SlotRow = { weekday: number; startTime: string; endTime: string; room: string | null };
 
@@ -17,16 +18,6 @@ function slotSignature(slots: SlotRow[]): string {
 }
 
 const keyOf = (c: { courseCode: string; section: string }) => `${c.courseCode}-${c.section}`;
-
-export async function currentSemesterId(): Promise<number> {
-  const [semester] = await db
-    .select({ id: semesters.id })
-    .from(semesters)
-    .orderBy(desc(semesters.startDate))
-    .limit(1);
-  if (!semester) throw new Error("No semester in the database; run pnpm db:seed");
-  return semester.id;
-}
 
 // Meetings are shared per section: the first student to save a section
 // defines its slots. Later students reuse them; if they report different

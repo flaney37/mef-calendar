@@ -1,7 +1,17 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { FeedInput } from "@/lib/feed";
 import { db } from "./index";
 import { enrollments, meetings, sections, semesters, students } from "./schema";
+
+export async function currentSemesterId(): Promise<number> {
+  const [semester] = await db
+    .select({ id: semesters.id })
+    .from(semesters)
+    .orderBy(desc(semesters.startDate))
+    .limit(1);
+  if (!semester) throw new Error("No semester in the database; run pnpm db:seed");
+  return semester.id;
+}
 
 // Everything needed to build one student's feed, or null for an unknown token.
 export async function loadFeedData(feedToken: string): Promise<Omit<FeedInput, "now"> | null> {
