@@ -114,12 +114,14 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 ### Phase 2 — Import from screenshot
 - [x] Spike: run Tesseract.js on a real SIS screenshot and look at the raw text — at original size (2000 px wide page) codes came out garbled ("coup 201", "eE209", "wa 211"), course names were fine; **upscaled 3x every code and section was exact** (confidence 66 → 85)
 - [x] `lib/extract.ts`: OCR text → `{code, section, name}` rows under the "DERS KODU" header; codes not in the catalog are repaired by course name + section (Dice similarity ≥ 0.7). Tests use both real OCR outputs; both give all 7 courses right, also against the full catalog
-- [x] Upload screen (`app/screenshot-import.tsx`): file picker (`accept="image/*"`), image upscaled on a canvas (≤3x, ~4500 px wide), `tesseract.js` imported only when a file is picked (it runs its own Web Worker; worker, WASM core and `eng` data come from the jsDelivr CDN and are cached by the browser)
+- [x] Upload screen (`app/screenshot-import.tsx`): file picker (`accept="image/*"`), `tesseract.js` imported only when a file is picked (it runs its own Web Worker; worker, WASM core and `eng` data come from the jsDelivr CDN and are cached by the browser)
+- [x] OCR robustness (after the first phone test found only 3–4 of 7): the row parser ignores the credit column, takes the section between course name and the all-caps instructor (1 may read as `| ' ] l`), and snaps misread department prefixes (HSTR → HISTR). The image is read **twice** (PSM 6 "single block", upscaled to ~3600 and ~4400 px wide, canvas capped at 16 Mpx for iPhone Safari) and the rows are merged; `matchToCatalog` keeps one entry per course and drops unknown departments. A 12-way test (4 scales × 3 PSM modes) on one screenshot found 0–7 rows depending on the setting, each missing a different row, hence the merge. Upscaling 5x made it worse (JPEG artifacts). Debug a bad image with `pnpm ocr:debug <image>` (prints only the course list part).
 - [x] "Review" screen: the Phase 1 form, pre-filled with the OCR result (catalog fills the times); the student corrects and saves
 - [x] Courses without a time slot (e.g. HISTR 213, TURK 114): not put on the calendar but kept in `enrollments`
 - [x] Error cases: OCR finds nothing / fails → message, the (empty) manual form stays below
 - Verified locally: OCR of the sample took ~6 s in Chromium; the only request to our server was 504 bytes of code/section/name for 7 rows (no image, no instructor or advisor names).
-- [ ] **Acceptance:** I upload my own screenshot and get the correct calendar in under a minute
+- [x] **Acceptance:** I upload my own screenshot and get the correct calendar in under a minute
+  - 2026-11-10 ✅ 7/7 courses on Mac and iPhone, with two different screenshots (the full-page desktop one and a closer one taken on the phone).
 
 ### Phase 3 — Cancellations, exams and room changes (manual input, fallback panel)
 - [ ] `/admin` — simple panel protected by `ADMIN_PASSWORD`
