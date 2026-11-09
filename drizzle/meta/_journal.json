@@ -8,6 +8,13 @@
       "when": 1794256182871,
       "tag": "0000_narrow_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794261179919,
+      "tag": "0001_sections",
+      "breakpoints": true
     }
   ]
 }

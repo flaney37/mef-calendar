@@ -12,6 +12,7 @@ import {
   text,
   time,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // Dates are kept as "YYYY-MM-DD" strings (mode: "string") rather than JS Date
@@ -54,6 +55,23 @@ export const enrollments = pgTable(
   (t) => [primaryKey({ columns: [t.studentId, t.courseCode] })],
 );
 
+// Per-section facts that don't depend on the day: course name, instructor.
+// Shared by every student in the section, like meetings.
+export const sections = pgTable(
+  "sections",
+  {
+    id: serial("id").primaryKey(),
+    semesterId: integer("semester_id")
+      .notNull()
+      .references(() => semesters.id),
+    courseCode: text("course_code").notNull(),
+    section: text("section").notNull(),
+    courseName: text("course_name"),
+    instructor: text("instructor"),
+  },
+  (t) => [uniqueIndex("sections_key_idx").on(t.semesterId, t.courseCode, t.section)],
+);
+
 // One row per weekly slot of a section, shared by every student in it.
 export const meetings = pgTable(
   "meetings",
@@ -70,7 +88,14 @@ export const meetings = pgTable(
     room: text("room"),
   },
   (t) => [
-    index("meetings_section_idx").on(t.semesterId, t.courseCode, t.section),
+    // Also blocks the same slot being inserted twice by two students at once.
+    uniqueIndex("meetings_slot_idx").on(
+      t.semesterId,
+      t.courseCode,
+      t.section,
+      t.weekday,
+      t.startTime,
+    ),
     check("meetings_weekday_check", sql`${t.weekday} between 1 and 7`),
   ],
 );
