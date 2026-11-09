@@ -102,7 +102,7 @@ const ocrRowsSchema = z
       name: z.string().max(200),
     }),
   )
-  .max(20);
+  .max(40); // rows of two OCR passes
 
 // OCR rows → courses ready for the review form: catalog sections come with
 // their official slots, others (e.g. HISTR 213) without slots.

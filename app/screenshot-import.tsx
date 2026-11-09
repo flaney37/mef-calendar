@@ -5,15 +5,20 @@ import type { EditCourse } from "@/lib/db/queries";
 import { findCourseRows } from "@/lib/extract";
 import { coursesFromOcr } from "./actions";
 
-// Small text on a full-page screenshot reads badly (codes like "coup 201");
-// upscaling before OCR fixed every code in tests. Capped so huge phone
-// screenshots don't run out of memory.
-const TARGET_WIDTH = 4500;
-const MAX_SCALE = 3;
+// Small text on a full-page screenshot reads badly, so the image is
+// upscaled first. Which scale reads best varies from image to image (one
+// misses EE 203, another COMP 205), so it is read twice at two widths and
+// the rows are merged; matchToCatalog removes duplicates and junk.
+// Measured on a 1280 px SIS screenshot: 3200–4500 px wide works, much
+// larger makes it worse (JPEG artifacts grow too).
+const PASS_WIDTHS = [3600, 4400];
+const MAX_SCALE = 4;
+// iPhone Safari refuses canvases above ~16.7 million pixels.
+const MAX_PIXELS = 16_000_000;
 
-async function upscale(file: File): Promise<HTMLCanvasElement> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.max(1, Math.min(MAX_SCALE, TARGET_WIDTH / bitmap.width));
+function drawScaled(bitmap: ImageBitmap, targetWidth: number): HTMLCanvasElement {
+  const fit = Math.sqrt(MAX_PIXELS / (bitmap.width * bitmap.height));
+  const scale = Math.min(Math.max(1, Math.min(MAX_SCALE, targetWidth / bitmap.width)), fit);
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
@@ -21,29 +26,36 @@ async function upscale(file: File): Promise<HTMLCanvasElement> {
   if (!ctx) throw new Error("canvas unavailable");
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
   return canvas;
 }
 
 // Runs entirely in this browser. The image and the OCR text stay in
 // memory here; only code / section / course name of the course rows are
 // sent on (see CLAUDE.md → Privacy rules). Nothing here is logged.
-async function readCourseRows(file: File) {
+async function readCourseRows(file: File, onPass: (pass: number) => void) {
   // Loaded on demand: the OCR engine is several MB and most visits don't need it.
-  const { createWorker } = await import("tesseract.js");
+  const { createWorker, PSM } = await import("tesseract.js");
   const worker = await createWorker("eng");
+  const bitmap = await createImageBitmap(file);
   try {
-    const canvas = await upscale(file);
-    const { data } = await worker.recognize(canvas);
-    return findCourseRows(data.text);
+    // "Single uniform block of text" read the course table most reliably.
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+    const rows = [];
+    for (const [i, width] of PASS_WIDTHS.entries()) {
+      onPass(i + 1);
+      const { data } = await worker.recognize(drawScaled(bitmap, width));
+      rows.push(...findCourseRows(data.text));
+    }
+    return rows;
   } finally {
+    bitmap.close();
     await worker.terminate();
   }
 }
 
 type Status =
   | { kind: "idle" }
-  | { kind: "reading" }
+  | { kind: "reading"; pass: number }
   | { kind: "done"; found: number; fromCatalog: number }
   | { kind: "error"; message: string };
 
@@ -52,9 +64,9 @@ export function ScreenshotImport({ onCourses }: { onCourses: (courses: EditCours
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
-    setStatus({ kind: "reading" });
+    setStatus({ kind: "reading", pass: 0 });
     try {
-      const rows = await readCourseRows(file);
+      const rows = await readCourseRows(file, (pass) => setStatus({ kind: "reading", pass }));
       if (rows.length === 0) {
         setStatus({
           kind: "error",
@@ -102,7 +114,9 @@ export function ScreenshotImport({ onCourses }: { onCourses: (courses: EditCours
       </label>
       {status.kind === "reading" && (
         <p role="status" className="text-sm text-zinc-500">
-          Görüntü okunuyor. İlk seferde okuma motoru indirildiği için biraz sürebilir.
+          {status.pass === 0
+            ? "Okuma motoru yükleniyor. İlk seferde biraz sürebilir…"
+            : `Görüntü okunuyor (${status.pass}/${PASS_WIDTHS.length})…`}
         </p>
       )}
       {status.kind === "done" && (

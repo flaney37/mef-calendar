@@ -163,11 +163,36 @@ describe("matchToCatalog", () => {
     expect(strip(matched)).toEqual(expected); // HSTR213 → HISTR213
   });
 
-  it("does not guess when the name matches nothing", () => {
-    const [course] = matchToCatalog(
-      [{ code: "XYZ999", section: "1", name: "Underwater Basket Weaving" }],
+  it("drops a course of an unknown department when the name matches nothing", () => {
+    // Real junk row from an over-upscaled pass: "Tide 114 TT e— 1 …"
+    expect(matchToCatalog([{ code: "TIDE114", section: "1", name: "TT e—" }], catalog)).toEqual([]);
+  });
+
+  it("keeps a known-department course that is not in the catalog", () => {
+    expect(matchToCatalog([{ code: "TURK114", section: "1", name: "Turkish" }], catalog)).toEqual([
+      { code: "TURK114", section: "1", match: "none" },
+    ]);
+  });
+
+  it("prefers the prefix with the same first letter on a tie", () => {
+    const catalogWithStat = [...catalog, { courseCode: "STAT102", section: "1", courseName: "Statics" }];
+    const [course] = matchToCatalog([{ code: "HSTA213", section: "1", name: "" }], catalogWithStat);
+    expect(course.code).toBe("HISTR213");
+  });
+
+  it("merges rows of several OCR passes into one entry per course", () => {
+    const passes = [...findCourseRows(OCR_SMALL), ...findCourseRows(OCR_FULL_PAGE), ...findCourseRows(OCR_UPSCALED)];
+    expect(strip(matchToCatalog(passes, catalog))).toEqual(expected);
+  });
+
+  it("lets the most certain reading win when passes disagree on the section", () => {
+    const merged = matchToCatalog(
+      [
+        { code: "XX201", section: "2", name: "Data Structures and Algorithms" }, // name match → COMP201-2
+        { code: "COMP201", section: "1", name: "Data Structures and Algorithms" }, // exact
+      ],
       catalog,
     );
-    expect(course).toEqual({ code: "XYZ999", section: "1", match: "none" });
+    expect(merged).toEqual([{ code: "COMP201", section: "1", match: "code" }]);
   });
 });

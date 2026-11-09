@@ -155,31 +155,40 @@ function editDistance(a: string, b: string): number {
   return row[b.length];
 }
 
+const prefixOf = (code: string) => /^[A-Z/]+/.exec(code)?.[0] ?? "";
+
 // "HSTR213" → "HISTR213": snap an unknown department prefix to the closest
-// known one, if it is only a letter or so away.
+// known one, if it is only a letter or so away. On a tie, prefer the one
+// with the same first letter ("HSTA" is 2 away from both HISTR and STAT).
 function fixPrefix(code: string, prefixes: Set<string>): string {
   const m = /^([A-Z/]+)(.*)$/.exec(code);
   if (!m || prefixes.has(m[1])) return code;
+  const maxDistance = m[1].length >= 4 ? 2 : 1;
   let best: string | null = null;
-  let bestDistance = m[1].length >= 4 ? 2 : 1;
+  let bestRank = Infinity;
   for (const p of prefixes) {
     const d = editDistance(m[1], p);
-    if (d < bestDistance || (d === bestDistance && best === null)) {
+    if (d > maxDistance) continue;
+    const rank = d * 2 + (p[0] === m[1][0] ? 0 : 1);
+    if (rank < bestRank) {
       best = p;
-      bestDistance = d;
+      bestRank = rank;
     }
   }
   return best ? best + m[2] : code;
 }
 
+const MATCH_RANK: Record<MatchedCourse["match"], number> = { code: 0, name: 1, none: 2 };
+
+// Rows may come from several OCR passes over the same image, so the same
+// course can appear more than once, and a bad pass can add junk. The
+// result has each course once (the most certain reading wins) and drops
+// rows whose department matches no known department at all.
 export function matchToCatalog(rows: OcrRow[], catalog: CatalogEntry[]): MatchedCourse[] {
   const byKey = new Set(catalog.map((c) => `${c.courseCode}-${c.section}`));
-  const prefixes = new Set([
-    ...catalog.map((c) => /^[A-Z/]+/.exec(c.courseCode)?.[0] ?? ""),
-    ...NON_CATALOG_PREFIXES,
-  ]);
+  const prefixes = new Set([...catalog.map((c) => prefixOf(c.courseCode)), ...NON_CATALOG_PREFIXES]);
 
-  return rows.map((read) => {
+  const matched = rows.map((read): MatchedCourse | null => {
     const row = { ...read, code: fixPrefix(read.code, prefixes) };
     if (byKey.has(`${row.code}-${row.section}`)) {
       return { code: row.code, section: row.section, match: "code" };
@@ -197,9 +206,17 @@ export function matchToCatalog(rows: OcrRow[], catalog: CatalogEntry[]): Matched
     if (best && bestScore >= NAME_MATCH_THRESHOLD) {
       return { code: best.courseCode, section: best.section, match: "name" };
     }
-    // Not in the catalog. Keep it only if it at least looks like a code.
-    return COURSE_CODE_PATTERN.test(row.code)
+    // Not in the catalog. Keep it only if it looks like a real course code.
+    return COURSE_CODE_PATTERN.test(row.code) && prefixes.has(prefixOf(row.code))
       ? { code: row.code, section: row.section, match: "none" }
       : null;
-  }).filter((c): c is MatchedCourse => c !== null);
+  });
+
+  const byCode = new Map<string, MatchedCourse>();
+  for (const course of matched) {
+    if (!course) continue;
+    const seen = byCode.get(course.code);
+    if (!seen || MATCH_RANK[course.match] < MATCH_RANK[seen.match]) byCode.set(course.code, course);
+  }
+  return [...byCode.values()];
 }
