@@ -154,6 +154,16 @@ describe("buildCalendar", () => {
     expect(out).toContain("SUMMARY:❌ İPTAL – COMP 201");
   });
 
+  it("writes all-day events as dates, ending on the next day", () => {
+    const out = buildCalendar({
+      name: "x",
+      events: [{ uid: "event-1@mef-calendar", summary: "📝 COMP 201 Vize", allDay: "2026-12-31" }],
+      now,
+    });
+    expect(out).toContain("DTSTART;VALUE=DATE:20261231\r\n");
+    expect(out).toContain("DTEND;VALUE=DATE:20270101\r\n"); // across the year end
+  });
+
   it("produces a valid calendar with no events", () => {
     const out = buildCalendar({ name: "x", events: [], now });
     expect(out).toContain("BEGIN:VCALENDAR");

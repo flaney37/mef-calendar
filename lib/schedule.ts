@@ -28,10 +28,29 @@ export type Session = {
   courseCode: string;
   section: string;
   date: string; // YYYY-MM-DD
+  startTime: string; // "HH:MM", Istanbul wall clock
   start: Date; // real instant
   end: Date;
   room: string | null;
+  kind: MeetingKind;
 };
+
+// When a section meets more than once a week, the shorter slots are
+// usually the lab (COMP 201: Mon 09:00–11:50 lecture, Mon 13:00–14:50
+// lab). Labs and lectures get cancelled or moved online independently, so
+// they are labelled and targeted separately. Equal lengths: no lab.
+export type MeetingKind = "lecture" | "lab";
+
+function minutes(time: string): number {
+  const [h, m] = toHHMM(time).split(":").map(Number);
+  return h * 60 + m;
+}
+
+export function meetingKind(meeting: Meeting, sectionMeetings: Meeting[]): MeetingKind {
+  const length = (m: Meeting) => minutes(m.endTime) - minutes(m.startTime);
+  const longest = Math.max(...sectionMeetings.map(length));
+  return length(meeting) < longest ? "lab" : "lecture";
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -81,6 +100,12 @@ export function expandSessions(semester: Semester, meetings: Meeting[]): Session
   const first = parseDate(semester.startDate);
   const last = parseDate(semester.endDate);
   const sessions: Session[] = [];
+  const kinds = new Map(
+    meetings.map((m) => [
+      m,
+      meetingKind(m, meetings.filter((o) => o.courseCode === m.courseCode && o.section === m.section)),
+    ]),
+  );
 
   for (let ms = first; ms <= last; ms += DAY_MS) {
     const date = formatDate(ms);
@@ -93,9 +118,11 @@ export function expandSessions(semester: Semester, meetings: Meeting[]): Session
         courseCode: m.courseCode,
         section: m.section,
         date,
+        startTime: toHHMM(m.startTime),
         start: istanbulToInstant(date, m.startTime),
         end: istanbulToInstant(date, m.endTime),
         room: m.room,
+        kind: kinds.get(m) ?? "lecture",
       });
     }
   }

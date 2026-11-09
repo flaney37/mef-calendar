@@ -1,7 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import type { FeedInput } from "@/lib/feed";
 import { db } from "./index";
-import { enrollments, meetings, sections, semesters, students } from "./schema";
+import { courseEvents, enrollments, meetings, sections, semesters, students } from "./schema";
 
 export async function currentSemesterId(): Promise<number> {
   const [semester] = await db
@@ -167,7 +167,7 @@ export async function loadFeedData(feedToken: string): Promise<Omit<FeedInput, "
       eq(table.semesterId, student.semesterId),
     );
 
-  const [meetingRows, sectionRows] = await Promise.all([
+  const [meetingRows, sectionRows, eventRows] = await Promise.all([
     db
       .select({
         courseCode: meetings.courseCode,
@@ -188,6 +188,32 @@ export async function loadFeedData(feedToken: string): Promise<Omit<FeedInput, "
       })
       .from(sections)
       .innerJoin(enrollments, enrolledIn(sections)),
+    // Events of the student's courses: for their section, or for all
+    // sections (section null).
+    db
+      .select({
+        id: courseEvents.id,
+        courseCode: courseEvents.courseCode,
+        section: courseEvents.section,
+        type: courseEvents.type,
+        date: courseEvents.date,
+        startTime: courseEvents.startTime,
+        endTime: courseEvents.endTime,
+        room: courseEvents.room,
+        title: courseEvents.title,
+        note: courseEvents.note,
+        status: courseEvents.status,
+      })
+      .from(courseEvents)
+      .innerJoin(
+        enrollments,
+        and(
+          eq(enrollments.studentId, student.id),
+          eq(enrollments.courseCode, courseEvents.courseCode),
+          or(isNull(courseEvents.section), eq(enrollments.section, courseEvents.section)),
+        ),
+      )
+      .where(eq(courseEvents.semesterId, student.semesterId)),
   ]);
 
   return {
@@ -198,5 +224,6 @@ export async function loadFeedData(feedToken: string): Promise<Omit<FeedInput, "
     },
     meetings: meetingRows,
     sections: sectionRows,
+    events: eventRows,
   };
 }

@@ -45,7 +45,7 @@ meetings       semester_id, course_code, section, weekday (1-7), start_time, end
                (one record per weekly slot of a section; shared across students;
                unique on semester + course + section + weekday + start_time)
 course_events  id, semester_id, course_code, section (null = all sections),
-               type: cancel | makeup | room_change | exam | other,
+               type: cancel | makeup | room_change | exam | other | online,
                date, start_time, end_time, room, title, note,
                status: confirmed | unconfirmed, source: manual | mail, created_at
 ```
@@ -66,12 +66,15 @@ course_events  id, semester_id, course_code, section (null = all sections),
 - The subscription link is also shown to the user with the `webcal://` scheme (Apple subscribes in one tap).
 - Time zone: **Europe/Istanbul** (fixed UTC+3, no daylight saving). Either include a `VTIMEZONE` or write times converted to UTC; don't mix the two.
 - **Do not use recurrence rules (RRULE); generate every class session as a separate VEVENT** (from semester start to end, excluding holidays). This makes marking cancellations and changing a single session much simpler.
-- Every VEVENT must have a **stable UID**: `<course>-<section>-<YYYYMMDD>-<HHMM>@mef-calendar`. Otherwise calendar apps duplicate events on every refresh.
-- Cancellation: the event is not deleted; the title becomes `❌ İPTAL – COMP 201` and `STATUS:CANCELLED` is added.
+- Every VEVENT must have a **stable UID**: `<course>-<section>-<YYYYMMDD>-<HHMM>@mef-calendar`. Otherwise calendar apps duplicate events on every refresh. Separate events (exam, makeup, other) use `event-<course_events.id>@mef-calendar`, so editing their date/time updates the same entry.
+- **Lab label** (decided 2026-11-10): when a section meets more than once a week, slots shorter than its longest slot are the lab: `COMP 201 Lab` (COMP 201-1: Mon 09:00–11:50 lecture, Mon 13:00–14:50 lab). Equal lengths → no lab. Computed from meetings (`meetingKind` in `lib/schedule.ts`), not stored; the UID does not change.
+- **Lecture and lab are independent** (owner: it's usually the lab that gets cancelled, and a 3-hour lecture went online while the lab stayed face-to-face). Session changes (cancel, online, room_change) target one session via `course_events.start_time`; `start_time` null means every session of that course on that date.
+- Cancellation: the event is not deleted; the title becomes `❌ İPTAL – COMP 201` (or `… COMP 201 Lab`) and `STATUS:CANCELLED` is added. A cancellation wins over other changes to the same session.
 - Unconfirmed cancellation: title `❓ Muhtemelen iptal – COMP 201`, the event is not cancelled.
-- Exam: separate VEVENT, title `📝 COMP 201 Vize`.
-- Room change: that session's `LOCATION` is updated and a note is added to the description.
-- `DESCRIPTION` contains the course name, section and instructor.
+- Online (event type `online`, added 2026-11-10): title `COMP 201 (Online)`, `LOCATION:Online`, note in the description (e.g. where the link is). Unconfirmed: `❓ COMP 201 (Muhtemelen online)`, location unchanged.
+- Room change: that session's `LOCATION` is updated and `Sınıf değişti: A → B` is added to the description. Unconfirmed: description note only.
+- Exam: separate VEVENT, title `📝 COMP 201 Vize` (`title` column; default "Sınav"). Make-up: `🔁 COMP 201 Telafi`. Other: `ℹ️ COMP 201 – <title>`. No start time → all-day event; start but no end → 1 hour. Unconfirmed → `❓ ` prefix.
+- `DESCRIPTION` contains change notes first (if any), then the course name, section and instructor.
 
 ## Privacy rules (strict)
 
@@ -126,7 +129,7 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 ### Phase 3 — Cancellations, exams and room changes (manual input, fallback panel)
 - [ ] `/admin` — simple panel protected by `ADMIN_PASSWORD`
 - [ ] Add event: course + section (or all sections), type, date, time, room, note, status (confirmed/unconfirmed)
-- [ ] The feed applies these events (cancellation title, exam event, room update)
+- [x] The feed applies these events (cancellation title, exam event, room update) — plus lab labels and the `online` type; 20 feed tests, checked against the DB with a fake course
 - [ ] Event list, edit and delete
 - [ ] **Acceptance:** I enter a cancellation in the panel; after Apple Calendar refreshes, the class shows as "❌ İPTAL"
 

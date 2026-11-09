@@ -26,13 +26,15 @@ const VTIMEZONE = [
 
 export type IcsEvent = {
   uid: string;
-  start: Date;
-  end: Date;
   summary: string;
   location?: string | null;
   description?: string | null;
   status?: "CONFIRMED" | "CANCELLED";
-};
+} & (
+  | { start: Date; end: Date }
+  // A whole-day event, e.g. an exam whose time isn't announced yet.
+  | { allDay: string } // YYYY-MM-DD
+);
 
 export type IcsCalendar = {
   name: string;
@@ -51,6 +53,11 @@ export function formatUtc(date: Date): string {
 export function formatIstanbul(date: Date): string {
   const shifted = new Date(date.getTime() + ISTANBUL_UTC_OFFSET_HOURS * 60 * 60 * 1000);
   return formatUtc(shifted).slice(0, -1);
+}
+
+function nextDay(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 // In TEXT values, backslash, semicolon, comma and newlines must be escaped,
@@ -92,8 +99,16 @@ function eventLines(event: IcsEvent, now: Date): string[] {
     "BEGIN:VEVENT",
     `UID:${event.uid}`,
     `DTSTAMP:${formatUtc(now)}`,
-    `DTSTART;TZID=${TZID}:${formatIstanbul(event.start)}`,
-    `DTEND;TZID=${TZID}:${formatIstanbul(event.end)}`,
+    ...("allDay" in event
+      ? [
+          // DTEND of an all-day event is the (exclusive) next day.
+          `DTSTART;VALUE=DATE:${event.allDay.replaceAll("-", "")}`,
+          `DTEND;VALUE=DATE:${nextDay(event.allDay).replaceAll("-", "")}`,
+        ]
+      : [
+          `DTSTART;TZID=${TZID}:${formatIstanbul(event.start)}`,
+          `DTEND;TZID=${TZID}:${formatIstanbul(event.end)}`,
+        ]),
     `SUMMARY:${escapeText(event.summary)}`,
   ];
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);

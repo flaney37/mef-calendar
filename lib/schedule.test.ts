@@ -3,6 +3,7 @@ import {
   expandSessions,
   istanbulToInstant,
   isoWeekday,
+  meetingKind,
   sessionUid,
   type Meeting,
   type Semester,
@@ -80,6 +81,38 @@ describe("sessionUid", () => {
     expect(sessionUid("COMP201", "1", "2026-09-14", "09:00")).toBe(
       sessionUid("COMP201", "1", "2026-09-14", "09:00:00"),
     );
+  });
+});
+
+describe("meetingKind", () => {
+  // COMP 201-1 in Fall 2026.
+  const lecture = meeting({ weekday: 1, startTime: "09:00", endTime: "11:50" });
+  const lab = meeting({ weekday: 1, startTime: "13:00", endTime: "14:50" });
+
+  it("labels the shorter slot of a section as lab", () => {
+    expect(meetingKind(lecture, [lecture, lab])).toBe("lecture");
+    expect(meetingKind(lab, [lecture, lab])).toBe("lab");
+  });
+
+  it("has no lab when all slots are equally long", () => {
+    const tue = meeting({ weekday: 2, startTime: "10:00", endTime: "11:50" });
+    const thu = meeting({ weekday: 4, startTime: "10:00", endTime: "11:50" });
+    expect(meetingKind(tue, [tue, thu])).toBe("lecture");
+    expect(meetingKind(thu, [tue, thu])).toBe("lecture");
+  });
+
+  it("calls a single weekly slot a lecture", () => {
+    expect(meetingKind(lecture, [lecture])).toBe("lecture");
+  });
+
+  it("is set on every expanded session, per section", () => {
+    const other = meeting({ courseCode: "MATH211", weekday: 1, startTime: "15:00", endTime: "15:50" });
+    const sessions = expandSessions(fall2026, [lecture, lab, other]).filter((s) => s.date === "2026-09-14");
+    expect(sessions.map((s) => `${s.courseCode} ${s.startTime} ${s.kind}`)).toEqual([
+      "COMP201 09:00 lecture",
+      "COMP201 13:00 lab",
+      "MATH211 15:00 lecture", // shorter than COMP 201's slots, but its own section has one slot
+    ]);
   });
 });
 

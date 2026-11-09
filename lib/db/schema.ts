@@ -106,12 +106,16 @@ export const meetings = pgTable(
   ],
 );
 
+// cancel, room_change, online: change one existing class session
+// (course_events.start_time picks the session; null = every session of
+// that course on that date). makeup, exam, other: a separate calendar event.
 export const eventType = pgEnum("event_type", [
   "cancel",
   "makeup",
   "room_change",
   "exam",
   "other",
+  "online",
 ]);
 export const eventStatus = pgEnum("event_status", ["confirmed", "unconfirmed"]);
 export const eventSource = pgEnum("event_source", ["manual", "mail"]);
