@@ -141,6 +141,8 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - [ ] If the same mail arrives from two volunteers, process it once (Message-ID / content hash)
 - [ ] Volunteer setup page: copy the script, paste the token, set up the trigger
 - [ ] Coverage map: which sections have a volunteer
+  - Coverage must be **per section, never per cohort/year** (owner, 2026-11-10): students taking courses from a lower year (alttan ders) or a mixed schedule don't share all courses with "their" class, so a volunteer from the normal cohort does not receive that section's mails. Count volunteers per `course_code + section` from their own enrollments.
+  - Show it to students: on the result/edit page, mark sections with no volunteer ("bu section için otomatik iptal takibi yok") so nobody assumes coverage they don't have; invite them to become the volunteer for it.
 - [ ] Later (optional): inbound email service for mails manually forwarded to an `iptal@…` address
 - [ ] **Acceptance:** a real cancellation email from an instructor lands in calendars within 15 minutes without anyone doing anything
 
@@ -165,6 +167,16 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 
 - **2026-2027 Fall:** classes 2026-09-14 (Mon) → 2026-12-11 (Fri, "Derslerin Son Günü"). Holidays with no class: 2026-10-28, 2026-10-29 (Cumhuriyet Bayramı), 2026-10-30 (all three listed as full days). 2026-10-06 is an emergency drill ("Acil Durum Tatbikatı"), not a holiday. 2026-12-14 → 12-31 is the project/presentation period (no regular classes).
 - Law faculty has its own sheet ("Lisans Hukuk"); not checked.
+
+## Open design question: exam rooms (deliberately undecided)
+
+Midterm/final rooms are usually assigned **by student**, e.g. by student number or surname range ("2021001–2021120 → A101"). Putting each student's own exam room into their feed needs a per-student key, which clashes with "no name, no student number" (Core decisions, Privacy rules). Options, cheapest privacy cost first:
+1. **No personal key:** the exam event carries the whole assignment table in its description; the student finds their row. Zero new data. Clumsy on a phone.
+2. **Key kept in the browser only:** the student types their number/surname range on the edit page, it is stored in `localStorage`, and the page shows "your room: A101". The feed (server-generated) can't use it, so the calendar still shows option 1.
+3. **Minimal stored key:** store only what the assignment rule needs (e.g. the range bucket or the first letter of the surname), never the full number/name. Personal feed shows the exact room. A real change to the privacy rules: ask the owner, update the KVKK notice.
+4. **Full student number:** simplest to automate, most expensive. Avoid.
+
+Don't build any of this until the owner decides; until then exams use option 1 (room or "see description" in `LOCATION`).
 
 ## Open questions
 - 2026-2027 Spring dates (same sheet, not read yet)
