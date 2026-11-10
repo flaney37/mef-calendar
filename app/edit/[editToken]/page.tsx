@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { loadEditData } from "@/lib/db/queries";
+import { volunteerStatus } from "@/lib/db/volunteers";
 import { TOKEN_PATTERN } from "@/lib/token";
 import { EditPanel } from "./edit-panel";
 
@@ -35,7 +36,7 @@ export default function EditPage({ params }: PageProps<"/edit/[editToken]">) {
 async function EditLoader({ params }: { params: PageProps<"/edit/[editToken]">["params"] }) {
   const { editToken } = await params;
   if (!TOKEN_PATTERN.test(editToken)) notFound();
-  const data = await loadEditData(editToken);
+  const [data, volunteer] = await Promise.all([loadEditData(editToken), volunteerStatus(editToken)]);
   if (!data) notFound();
-  return <EditPanel editToken={editToken} feedToken={data.feedToken} courses={data.courses} />;
+  return <EditPanel editToken={editToken} feedToken={data.feedToken} courses={data.courses} volunteer={volunteer} />;
 }

@@ -1,7 +1,10 @@
 "use server";
 
+import { headers } from "next/headers";
 import { z } from "zod";
+import { appsScriptSource } from "@/lib/apps-script";
 import { COURSE_CODE_PATTERN, normalizeCourseCode, normalizeSection } from "@/lib/course-code";
+import { issueVolunteerToken, stopVolunteering } from "@/lib/db/volunteers";
 import {
   catalogEntries,
   currentSemesterId,
@@ -88,6 +91,42 @@ export async function deleteSchedule(editToken: unknown): Promise<ActionResult> 
     return (await deleteStudent(token.data)) ? { ok: true } : { ok: false, error: NOT_FOUND };
   } catch (error) {
     console.error(`deleteSchedule ${truncateToken(token.data)} failed`, error);
+    return { ok: false, error: FAILED };
+  }
+}
+
+// The address of this site as the browser reached it, so the script posts
+// to the same place (localhost in development, the Vercel domain live).
+async function siteOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "mef-calendar.vercel.app";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+// Becoming a volunteer, or getting a new script (the old one stops
+// working). The returned script contains the token; it is shown once and
+// never stored on our side.
+export async function becomeVolunteer(editToken: unknown): Promise<ActionResult<{ script: string }>> {
+  const token = editTokenSchema.safeParse(editToken);
+  if (!token.success) return { ok: false, error: NOT_FOUND };
+  try {
+    const ingestToken = await issueVolunteerToken(token.data);
+    if (!ingestToken) return { ok: false, error: NOT_FOUND };
+    return { ok: true, script: appsScriptSource({ apiUrl: `${await siteOrigin()}/api/ingest`, token: ingestToken }) };
+  } catch (error) {
+    console.error(`becomeVolunteer ${truncateToken(token.data)} failed`, error);
+    return { ok: false, error: FAILED };
+  }
+}
+
+export async function leaveVolunteering(editToken: unknown): Promise<ActionResult> {
+  const token = editTokenSchema.safeParse(editToken);
+  if (!token.success) return { ok: false, error: NOT_FOUND };
+  try {
+    return (await stopVolunteering(token.data)) ? { ok: true } : { ok: false, error: NOT_FOUND };
+  } catch (error) {
+    console.error(`leaveVolunteering ${truncateToken(token.data)} failed`, error);
     return { ok: false, error: FAILED };
   }
 }

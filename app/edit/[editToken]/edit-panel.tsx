@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { EditCourse } from "@/lib/db/queries";
+import type { VolunteerStatus } from "@/lib/db/volunteers";
+import { VolunteerSection } from "./volunteer-section";
 import { deleteSchedule, rotateFeed } from "../../actions";
 import { FeedLinks } from "../../feed-links";
 import { ScheduleForm } from "../../schedule-form";
@@ -13,10 +15,12 @@ export function EditPanel({
   editToken,
   feedToken: initialFeedToken,
   courses,
+  volunteer,
 }: {
   editToken: string;
   feedToken: string;
   courses: EditCourse[];
+  volunteer: VolunteerStatus;
 }) {
   const [feedToken, setFeedToken] = useState(initialFeedToken);
   const [rotated, setRotated] = useState(false);
@@ -86,6 +90,8 @@ export function EditPanel({
       </section>
 
       <ScheduleForm editToken={editToken} initialCourses={courses} />
+
+      <VolunteerSection editToken={editToken} status={volunteer} sections={courses} />
 
       <section className={sectionClass}>
         <h2 className="font-medium">Kaydımı sil</h2>
