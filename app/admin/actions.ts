@@ -11,6 +11,7 @@ import {
 } from "@/lib/admin-auth";
 import { COURSE_CODE_PATTERN, normalizeCourseCode } from "@/lib/course-code";
 import {
+  confirmEvent,
   courseMeetings,
   courseSections,
   currentSemester,
@@ -89,6 +90,15 @@ export async function saveEvent(id: unknown, raw: unknown): Promise<Result<{ eve
   else if (!(await updateEvent(semester.id, eventId.data, parsed.data))) {
     return { ok: false, error: "Olay bulunamadı (silinmiş olabilir)." };
   }
+  return { ok: true, events: await listEvents(semester.id) };
+}
+
+export async function approveEvent(id: unknown): Promise<Result<{ events: AdminEvent[] }>> {
+  if (!(await isAdmin())) return EXPIRED;
+  const eventId = z.number().int().positive().safeParse(id);
+  if (!eventId.success) return { ok: false, error: "Geçersiz olay." };
+  const semester = await currentSemester();
+  if (!(await confirmEvent(semester.id, eventId.data))) return { ok: false, error: "Olay bulunamadı (silinmiş olabilir)." };
   return { ok: true, events: await listEvents(semester.id) };
 }
 

@@ -113,5 +113,14 @@ export function planIngest(
     input.subject,
   );
   if (problem) return nothing("unsure", problem, true);
-  return { outcome: "processed", reason: null, events, keepSubject: true };
+  // Owner's rule (2026-11-10): a person confirms every event read from a
+  // mail in /admin. Until then calendars show it with ❓. What the parser
+  // wasn't sure about goes into the note, to help the review.
+  const doubts = parsed.notes.length > 0 ? ` · Emin olunmayan: ${parsed.notes.join(", ")}` : "";
+  const reviewed = events.map((e) => ({
+    ...e,
+    status: "unconfirmed" as const,
+    note: `${e.note ?? ""}${doubts}`.slice(0, 500),
+  }));
+  return { outcome: "processed", reason: null, events: reviewed, keepSubject: true };
 }

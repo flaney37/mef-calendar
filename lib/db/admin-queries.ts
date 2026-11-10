@@ -71,10 +71,11 @@ export async function courseSections(semesterId: number, courseCode: string): Pr
     });
 }
 
-export type AdminEvent = EventInput & { id: number };
+export type AdminEvent = EventInput & { id: number; source: "manual" | "mail" };
 
 const eventColumns = {
   id: courseEvents.id,
+  source: courseEvents.source,
   courseCode: courseEvents.courseCode,
   section: courseEvents.section,
   type: courseEvents.type,
@@ -109,6 +110,16 @@ export async function updateEvent(semesterId: number, id: number, event: EventIn
   const rows = await db
     .update(courseEvents)
     .set(event)
+    .where(and(eq(courseEvents.id, id), eq(courseEvents.semesterId, semesterId)))
+    .returning({ id: courseEvents.id });
+  return rows.length > 0;
+}
+
+// The review step for events read from mails: one click in /admin.
+export async function confirmEvent(semesterId: number, id: number) {
+  const rows = await db
+    .update(courseEvents)
+    .set({ status: "confirmed" })
     .where(and(eq(courseEvents.id, id), eq(courseEvents.semesterId, semesterId)))
     .returning({ id: courseEvents.id });
   return rows.length > 0;

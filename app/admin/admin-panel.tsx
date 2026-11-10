@@ -7,7 +7,7 @@ import type { AdminEvent, AdminSection } from "@/lib/db/admin-queries";
 import { SESSION_CHANGE_TYPES, type EventType } from "@/lib/event-input";
 import { isoWeekday } from "@/lib/schedule";
 import { inputClass } from "../feed-links";
-import { adminCourseInfo, logout, removeEvent, saveEvent } from "./actions";
+import { adminCourseInfo, approveEvent, logout, removeEvent, saveEvent } from "./actions";
 
 const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
@@ -136,8 +136,19 @@ export function AdminPanel({
     });
   }
 
+  function approve(id: number) {
+    startTransition(async () => {
+      const res = await approveEvent(id);
+      if (!res.ok) return setMessage({ kind: "error", text: res.error });
+      setEvents(res.events);
+      setMessage({ kind: "ok", text: "Onaylandı. Takvimlerde ❓ bir sonraki yenilemede kalkacak." });
+    });
+  }
+
   const today = new Date().toISOString().slice(0, 10);
-  const upcoming = events.filter((e) => e.date >= today);
+  // Read from a mail and not yet checked by a person: shown first.
+  const toReview = events.filter((e) => e.source === "mail" && e.status === "unconfirmed" && e.date >= today);
+  const upcoming = events.filter((e) => e.date >= today && !toReview.includes(e));
   const past = events.filter((e) => e.date < today).reverse();
   const courseName = course?.sections.find((s) => s.courseName)?.courseName;
 
@@ -158,6 +169,23 @@ export function AdminPanel({
           Çıkış
         </button>
       </div>
+
+      {toReview.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/40">
+          <EventList
+            title={`Onay bekleyen (mailden) · ${toReview.length}`}
+            events={toReview}
+            onEdit={edit}
+            onApprove={approve}
+            confirmDelete={confirmDelete}
+            setConfirmDelete={setConfirmDelete}
+            onDelete={remove}
+          />
+          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+            Takvimlerde ❓ ile görünüyorlar. Mailin dediğiyle uyuşuyorsa Onayla; değilse Düzenle ya da Sil.
+          </p>
+        </div>
+      )}
 
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <h2 className="font-medium">{form.id ? "Olayı düzenle" : "Yeni olay"}</h2>
@@ -343,6 +371,7 @@ function EventList({
   title,
   events,
   onEdit,
+  onApprove,
   confirmDelete,
   setConfirmDelete,
   onDelete,
@@ -350,6 +379,7 @@ function EventList({
   title: string;
   events: AdminEvent[];
   onEdit: (e: AdminEvent) => void;
+  onApprove?: (id: number) => void;
   confirmDelete: number | null;
   setConfirmDelete: (id: number | null) => void;
   onDelete: (id: number) => void;
@@ -367,6 +397,7 @@ function EventList({
                 {displayCourseCode(e.courseCode)} · {e.section ? `Section ${e.section}` : "Tüm section'lar"}
               </span>
               {e.status === "unconfirmed" && <span className="text-amber-700 dark:text-amber-400">❓ Belirsiz</span>}
+              {e.source === "mail" && <span className="text-zinc-500">📧 Mailden</span>}
             </div>
             <div>
               {TYPE_LABELS[e.type]}
@@ -377,6 +408,11 @@ function EventList({
             </div>
             {e.note && <div className="text-zinc-600 dark:text-zinc-400">{e.note}</div>}
             <div className="flex gap-3">
+              {onApprove && e.status === "unconfirmed" && (
+                <button type="button" onClick={() => onApprove(e.id)} className="font-medium text-emerald-700 dark:text-emerald-400">
+                  Onayla
+                </button>
+              )}
               <button type="button" onClick={() => onEdit(e)} className="text-blue-600">
                 Düzenle
               </button>

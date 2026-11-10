@@ -72,13 +72,20 @@ describe("hashToken / dedupeKey", () => {
 });
 
 describe("planIngest", () => {
-  it("a lab cancellation for the volunteer's section → one event", () => {
+  it("a lab cancellation for the volunteer's section → one event, waiting for review (❓)", () => {
     const p = plan(noLabs);
     expect(p.outcome).toBe("processed");
     expect(p.keepSubject).toBe(true);
     expect(p.events).toEqual([
-      expect.objectContaining({ courseCode: "COMP201", section: "1", type: "cancel", date: "2026-11-09", startTime: "13:00", status: "confirmed" }),
+      expect.objectContaining({ courseCode: "COMP201", section: "1", type: "cancel", date: "2026-11-09", startTime: "13:00", status: "unconfirmed" }),
     ]);
+    // The parser was sure, so the note has no doubts listed.
+    expect(p.events[0].note).not.toContain("Emin olunmayan");
+  });
+
+  it("what the parser wasn't sure about is written into the note for the reviewer", () => {
+    const p = plan({ ...noLabs, from: "Hoca <hoca@mef.edu.tr>", subject: "Duyuru", body: "Yarınki COMP 201 dersi yapılmayacaktır.", sentAt: "2026-11-15T10:00:00Z" });
+    expect(p.events[0].note).toContain("Emin olunmayan");
   });
 
   it("a section the volunteer isn't in → unsure, no events", () => {
@@ -99,7 +106,7 @@ describe("planIngest", () => {
       sentAt: "2026-11-10T09:00:00Z", // Tue → Wed 11 Nov
     });
     expect(p.outcome).toBe("processed");
-    expect(p.events).toEqual([expect.objectContaining({ courseCode: "MATH102", section: "1", date: "2026-11-11", status: "confirmed" })]);
+    expect(p.events).toEqual([expect.objectContaining({ courseCode: "MATH102", section: "1", date: "2026-11-11", status: "unconfirmed" })]);
   });
 
   it("a course code without a section → the volunteer's section, unconfirmed", () => {
