@@ -140,7 +140,7 @@ function findCourse(subject: string, body: string): CourseRef | "many" | null {
 type Classified = EventType | "postponed" | "conflict";
 
 const IGNORE_SUBJECT =
-  /\b(submission received|daily notifications?|results?|sonuc\w*|grades?|scores?|notlar|objection|itiraz\w*|paper review|attendance|due date|deadline|teslim\w*|assignments?|homework|odev\w*)\b/;
+  /\b(submission received|daily notifications?|results?|sonuc\w*|grades?|scores?|notlar|objection|itiraz\w*|paper review|attendance|due date|deadline|teslim\w*|assignments?|homework|odev\w*|topics?|konular\w*)\b/;
 // Mails asking students to choose: their options are not decisions.
 const POLL_SUBJECT = /\b(poll|anket\w*|survey|vote|oylama)\b/;
 const POSTPONED = /\b(postponed|rescheduled|ertelen\w*|ileri bir tarih\w*)\b/;
@@ -159,6 +159,10 @@ const ONLINE_NEGATED = /\bonline\b[^.]{0,25}\b(olmayacak\w*|yapilmayacak\w*|degi
 // Course rules, not events: "there will be no make-up labs".
 const POLICY = /\bno make-?up\b|\btelafi(?:si)? (?:yok|olmayacak\w*|yapilmayacak\w*)/g;
 const MAKEUP = /\b(make-?up|make up (?:class|lecture|lab)|telafi\w*)\b/;
+// An extra session that isn't in the weekly schedule: "Extra online lecture
+// on November 27 at 18:00". A make-up-like event of its own, not an existing
+// lecture moving online (10 of 13 such mails were read as "online" before).
+const EXTRA = /\b(extra|additional)\b[^.]{0,25}\b(lectures?|class(?:es)?|lessons?|sessions?)\b|\bek ders\w*/;
 const ROOM = /\b(room change|classroom change|classroom update|sinif degis\w*|derslik degis\w*|new (?:room|classroom)|will be held in)\b/;
 const ONLINE = /\b(online|cevrimici|uzaktan|ms teams|microsoft teams|on teams|via teams|zoom)\b/;
 // A change that holds from now on, not for one session.
@@ -186,7 +190,7 @@ function classify(sentence: string): Classified | null {
   if (exam && cancel) return "conflict"; // "the quiz is cancelled": not a session change
   if (exam) return "exam";
   if (cancel) return "cancel";
-  if (MAKEUP.test(folded)) return "makeup";
+  if (MAKEUP.test(folded) || EXTRA.test(folded)) return "makeup";
   if (ROOM.test(folded)) return "room_change";
   if (ONLINE.test(folded)) return "online";
   return null;
@@ -315,6 +319,8 @@ function absoluteDates(folded: string, sent: string): DateRange[] {
   take(new RegExp(`\\b${DAY}\\s+(?:of\\s+)?${MONTH}${YEAR}`, "g"), (m) => single(m[1], MONTHS[m[2]], m[3]));
   take(new RegExp(`\\b${MONTH}\\s+${DAY}\\b${YEAR}`, "g"), (m) => single(m[2], MONTHS[m[1]], m[3]));
   take(/\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b/g, (m) => single(m[1], Number(m[2]), m[3]));
+  // "04.11.25": two-digit year.
+  take(/\b(\d{1,2})[./](\d{1,2})[./](\d{2})\b/g, (m) => single(m[1], Number(m[2]), String(2000 + Number(m[3]))));
   take(/\b(\d{1,2})\/(\d{1,2})\b/g, (m) => (Number(m[2]) <= 12 ? single(m[1], Number(m[2]), undefined) : null));
   return found;
 }
@@ -434,7 +440,26 @@ export function parseMail(mail: MailInput): ParsedMail {
   if (classified === null) return { outcome: "ignored", reason: "İptal/sınav/online gibi bir anahtar kelime yok" };
 
   const allCourses = course === null && all.some((s) => ALL_COURSES.test(s));
-  if (classified === "postponed") return { outcome: "unsure", reason: "Ertelendi: yeni tarih elle girilmeli", course };
+  // "The first midterm exam is postponed to be held on the 9th of November":
+  // an exam on the new date. A postponement without a new date ("has been
+  // postponed. It will be held on an alternative date.") stays unsure.
+  let newDates: DateRange[] | null = null;
+  if (classified === "postponed") {
+    // The subject may say "postponed" and the body "postponed to <date>".
+    for (const said of all.filter((s) => POSTPONED.test(s))) {
+      const tail =
+        said.match(/\b(?:postponed|rescheduled?|moved)\b[^.]*?\b(?:to|until)\b(.*)$/)?.[1] ??
+        said.match(/^(.*)\b(?:tarihine|gunune)\s+(?:ertelen|alin|tasin)\w*/)?.[1];
+      const found = tail ? absoluteDates(tail, sent).filter((r) => r.end >= sent) : [];
+      if (found.length > 0 && (EXAM.test(said) || EXAM.test(all[typeIndex]))) {
+        newDates = found;
+        typeIndex = all.indexOf(said);
+        break;
+      }
+    }
+    if (!newDates) return { outcome: "unsure", reason: "Ertelendi: yeni tarih elle girilmeli", course };
+    classified = "exam";
+  }
   if (classified === "conflict") return { outcome: "unsure", reason: "Hem sınav hem iptal geçiyor", course };
   if (course === null && !allCourses) return { outcome: "unsure", reason: "Ders kodu bulunamadı", course: null };
 
@@ -446,7 +471,7 @@ export function parseMail(mail: MailInput): ParsedMail {
   // will not be held. Make-up classes on 24, 26, 27 March": the cancellation
   // is only the first three.)
   let dateIndex = -1;
-  let dates: DateRange[] = absoluteDates(typeSentence, sent).filter((r) => r.end >= sent);
+  let dates: DateRange[] = newDates ?? absoluteDates(typeSentence, sent).filter((r) => r.end >= sent);
   let vague = false;
   if (dates.length > 0) dateIndex = typeIndex;
   else {
@@ -492,7 +517,11 @@ export function parseMail(mail: MailInput): ParsedMail {
     // An exam is on a day, said where the exam is mentioned ("practice
     // problems for the midterm … on Monday" is not an exam on Monday).
     if (dates.some((r) => r.start !== r.end)) return { outcome: "unsure", reason: "Sınav için tek bir gün yok", course: course ?? null };
-    if (typeIndex !== 0 && dateIndex !== typeIndex) {
+    // Said in the subject ("Topics included in the midterm exam"): the date
+    // must still come from a sentence about the exam, not "topics covered on
+    // Friday, November 7".
+    const aboutIt = (s: string) => EXAM.test(s) || MAKEUP.test(s) || EXTRA.test(s);
+    if (dateIndex !== typeIndex && !(typeIndex === 0 && dateIndex !== -1 && aboutIt(all[dateIndex]))) {
       return { outcome: "unsure", reason: "Sınav cümlesinde tarih yok", course: course ?? null };
     }
   }
@@ -508,8 +537,12 @@ export function parseMail(mail: MailInput): ParsedMail {
     if (stated.length > 0 && !stated.includes(isoWeekday(dates[0].start))) notes.push("Gün adı tarihle uyuşmuyor");
   }
 
-  const timeSource = dateIndex !== -1 && timesIn(all[dateIndex]).start ? all[dateIndex] : typeSentence;
-  const time = timesIn(timeSource);
+  // The time: where the date was, else where the change was said, else a
+  // sentence naming the same day ("…on November 27" in the subject, "on
+  // November 27, Thursday at 18:00" in the body).
+  const sameDay = [...all.keys()].filter((i) => absoluteDates(all[i], sent).some((r) => r.start === dates[0].start));
+  const timeSource = [dateIndex, typeIndex, ...sameDay].find((i) => i !== -1 && timesIn(all[i]).start) ?? typeIndex;
+  const time = timesIn(all[timeSource]);
 
   if (HEDGE.test(typeSentence) || (dateIndex !== -1 && HEDGE.test(all[dateIndex]))) notes.push("Kesin olmayan ifade");
   if (course && !course.fromKey) notes.push("Ders kodu metinden okundu (Blackboard anahtarı yok)");
@@ -537,7 +570,7 @@ export function parseMail(mail: MailInput): ParsedMail {
     // "Classroom update" + "Today's lab will take place in A415": lab.
     kind: type === "exam" ? null : kindOf(typeSentence) ?? (dateIndex !== -1 ? kindOf(all[dateIndex]) : null),
     room,
-    title: type === "exam" ? examTitle(typeSentence) : null,
+    title: type === "exam" ? examTitle(typeSentence) : type === "makeup" && EXTRA.test(typeSentence) ? "Ek ders" : null,
     confident: notes.length === 0,
     notes,
   };

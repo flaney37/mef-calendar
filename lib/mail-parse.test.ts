@@ -512,6 +512,60 @@ Merhaba, 17 Mart ( Salı) , 19 Mart (Perşembe) ve 20 Mart (Cuma ) günlerindeki
   });
 });
 
+// From the held-out measurement (126 mails the parser had not seen,
+// 2026-11-10). Each case was read wrongly by the version measured there.
+describe("parseMail — held-out set fixes", () => {
+  const mail = (iso: string, subject: string, body: string) => parseMail({ subject, body, sentAt: new Date(iso) });
+
+  it("'Extra online lecture on November 27 at 18:00' is an extra session, not an existing lecture going online", () => {
+    const p = event(
+      mail(
+        "2025-11-26T09:00:00Z",
+        "2025-2026-01-MATH101-01 Calculus I: Extra online lecture on November 27, Thursday",
+        "There will be an extra online lecture on November 27, Thursday at 18:00. The link will be shared prior to the lecture.",
+      ),
+    );
+    expect(p).toMatchObject({ type: "makeup", title: "Ek ders", startTime: "18:00", dates: [{ start: "2025-11-27", end: "2025-11-27" }] });
+  });
+
+  it("'Topics included in the midterm exam' mails are not exam dates", () => {
+    // The date is when topics were covered, in the same sentence as "exam".
+    const p = mail(
+      "2025-11-06T09:00:00Z",
+      "Calculus I: Topics included in the midterm exam-1",
+      "2025-2026-01-MATH101-01\nThe topics included in the first midterm exam are all the topics covered, excluding the ones that are to be covered on Friday, November 7.",
+    );
+    expect(p.outcome).toBe("ignored");
+  });
+
+  it("an exam named in the subject needs its date from a sentence about the exam", () => {
+    const p = mail(
+      "2025-11-06T09:00:00Z",
+      "2025-2026-01-MATH101-01 Calculus I: Midterm exam-1",
+      "Please review the material.\nThe lecture notes from November 7 are on Blackboard.",
+    );
+    expect(p.outcome).toBe("unsure");
+  });
+
+  it("'Midterm I will be on 04.11.25 between 18:00-20:00' (two-digit year)", () => {
+    const p = event(mail("2025-10-27T09:00:00Z", "2025-2026-01-COMP100-01 midterm I", "Midterm I will be on 04.11.25 between 18:00-20:00 @A101,A116"));
+    expect(p).toMatchObject({ type: "exam", startTime: "18:00", endTime: "20:00", dates: [{ start: "2025-11-04", end: "2025-11-04" }] });
+  });
+
+  it("'postponed to be held on the 9th of November, Sunday, 18:00' → exam on the new date", () => {
+    const p = event(
+      mail("2025-10-20T09:00:00Z", "2025-2026-01-MATH101-01 Calculus I: 1st Midterm Exam is postponed", "The first midterm exam is postponed to be held on the 9th of November, Sunday, 18:00."),
+    );
+    expect(p).toMatchObject({ type: "exam", startTime: "18:00", dates: [{ start: "2025-11-09", end: "2025-11-09" }] });
+  });
+
+  it("a postponement without a new date stays unsure", () => {
+    expect(
+      mail("2026-10-26T09:00:00Z", "2026-2027-01-ECON114-01", "As the university has announced a public holiday on 28 October 2026, the online midterm has been postponed.").outcome,
+    ).toBe("unsure");
+  });
+});
+
 describe("mailToEvents", () => {
   const run = (mail: MailInput) => mailToEvents(parseMail(mail), semester, meetings, mail.subject);
 
