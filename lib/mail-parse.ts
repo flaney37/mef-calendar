@@ -57,7 +57,8 @@ export type ParsedMail =
       course: CourseRef | null; // null only when allCourses
       allCourses: boolean; // "[EVERYONE] classes online tomorrow"
       type: EventType;
-      dates: DateRange[];
+      dates: DateRange[]; // a permanent change runs to OPEN_END (cut at semester end)
+      weekdays: number[] | null; // only sessions on these ISO weekdays (permanent changes)
       startTime: string | null; // "HH:MM"
       endTime: string | null;
       kind: MeetingKind | null; // lab / lecture, null = not said
@@ -135,18 +136,33 @@ function findCourse(subject: string, body: string): CourseRef | "many" | null {
 
 type Classified = EventType | "postponed" | "conflict";
 
-const IGNORE_SUBJECT = /\b(submission received|daily notifications?|results?|sonuc|grades?|notlar|paper review|attendance)\b/;
+const IGNORE_SUBJECT =
+  /\b(submission received|daily notifications?|results?|sonuc\w*|grades?|notlar|paper review|attendance|due date|deadline|teslim\w*)\b/;
 const POSTPONED = /\b(postponed|rescheduled|ertelen\w*|ileri bir tarih\w*)\b/;
 const EXAM = /\b(midterm|vize|final|quiz|exam|sinav\w*)\b/;
+// "No lab sessions this week" is a cancellation; a bare "there will be no …"
+// is not ("there will be no make-up labs" is a rule, not an event).
 const CANCEL =
-  /\b(cancell?ed|cancel|iptal\w*|yapilmayacak\w*|olmayacak\w*|will not be held|won'?t be held|there will be no|no (?:lab|labs|lab sessions?|class|classes|lectures?|lessons?))\b/;
+  /\b(cancell?ed|cancel|iptal\w*|yapilmayacak\w*|olmayacak\w*|will not be held|won'?t be held|no (?:lab|labs|lab sessions?|class|classes|lectures?|lessons?))\b/;
+// Sentences about what *would* happen: "If there is no lab on a particular
+// week, you will be informed beforehand." Never an event.
+const CONDITIONAL = /\b(if|unless|in case|eger|halinde|durumunda|takdirde)\b/;
+// Course rules, not events: "there will be no make-up labs".
+const POLICY = /\bno make-?up\b|\btelafi(?:si)? (?:yok|olmayacak\w*|yapilmayacak\w*)/g;
 const MAKEUP = /\b(make-?up|make up (?:class|lecture|lab)|telafi\w*)\b/;
 const ROOM = /\b(room change|classroom change|classroom update|sinif degis\w*|derslik degis\w*|new (?:room|classroom)|will be held in)\b/;
 const ONLINE = /\b(online|cevrimici|uzaktan|ms teams|microsoft teams|zoom)\b/;
-const HEDGE = /\b(might|possibly|probably|tentative\w*|muhtemelen|olabilir|planlan\w*)\b/;
+// A change that holds from now on, not for one session.
+const RECURRING =
+  /\b(starting (?:from )?(?:this|next|today|tomorrow|\d)|from now on|onwards|until further notice|for the rest of the semester|bundan (?:boyle|sonra)|itibaren|donem sonuna kadar)\b/;
+export const OPEN_END = "9999-12-31";
+const SESSION_CHANGES: readonly EventType[] = ["cancel", "online", "room_change"];
+const HEDGE =/\b(might|possibly|probably|tentative\w*|muhtemelen|olabilir|planlan\w*)\b/;
 const ALL_COURSES = /\[everyone\]|\b(tum dersler\w*|butun dersler\w*|derslerin|all classes|all courses|all lectures)\b/;
 
-function classify(folded: string): Classified | null {
+function classify(sentence: string): Classified | null {
+  if (CONDITIONAL.test(sentence)) return null;
+  const folded = sentence.replace(POLICY, " ");
   if (POSTPONED.test(folded)) return "postponed";
   const exam = EXAM.test(folded);
   const cancel = CANCEL.test(folded);
@@ -167,15 +183,22 @@ function examTitle(folded: string): string {
 }
 
 function kindOf(folded: string): MeetingKind | null {
-  if (/\b(labs?|lab sessions?|laboratuvar\w*|uygulama\w*)\b/.test(folded)) return "lab";
+  if (/\b(labs?|lab sessions?|laborator\w*|laboratuvar\w*|uygulama\w*)\b/.test(folded)) return "lab";
   if (/\b(lectures?|ders|dersi|class)\b/.test(folded)) return "lecture";
   return null;
 }
 
-// A room like "A101", "B-315", "E 204" — the last one in the sentence.
+// The new room ("A101", "B-315", "E 204"). The old one is skipped:
+// "held in A415 instead of A303", "moved from A303 to A415",
+// "A303 yerine A415".
 function roomIn(text: string): string | null {
-  const rooms = [...text.matchAll(/\b([A-Z]{1,2})[ -]?(\d{3})\b/g)].map((m) => `${m[1]}${m[2]}`);
-  return rooms.at(-1) ?? null;
+  const rooms = [...text.matchAll(/\b([A-Z]{1,2})[ -]?(\d{3})\b/g)].filter((m) => {
+    const before = fold(text.slice(Math.max(0, m.index - 12), m.index));
+    const after = fold(text.slice(m.index + m[0].length, m.index + m[0].length + 8));
+    return !/(instead of|from)\s*$/.test(before) && !/^\s*(yerine|'?(?:den|dan|ten|tan)\b)/.test(after);
+  });
+  const last = rooms.at(-1);
+  return last ? `${last[1]}${last[2]}` : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +281,18 @@ function absoluteDates(folded: string, sent: string): DateRange[] {
     return date ? { start: date, end: date } : null;
   };
 
+  // "the week of October 5", "5 Ekim haftası": that day and the six after it.
+  const week = (r: DateRange | null) => (r ? { start: r.start, end: addDays(r.start, 6) } : null);
+  take(new RegExp(`\\bweek of\\s+${MONTH}\\s+${DAY}\\b${YEAR}`, "g"), (m) => week(single(m[2], MONTHS[m[1]], m[3])));
+  take(new RegExp(`\\bweek of\\s+${DAY}\\s+(?:of\\s+)?${MONTH}${YEAR}`, "g"), (m) => week(single(m[1], MONTHS[m[2]], m[3])));
+  take(new RegExp(`\\b${DAY}\\s+${MONTH}\\s+haftasi\\w*`, "g"), (m) => week(single(m[1], MONTHS[m[2]], undefined)));
+  // "October 5 and 6", "5 ve 6 Ekim": two single days.
+  const both = (d1: string, d2: string, mon: string, year: string | undefined) => {
+    found.push(...[single(d1, MONTHS[mon], year), single(d2, MONTHS[mon], year)].filter((r): r is DateRange => r !== null));
+    return null;
+  };
+  take(new RegExp(`\\b${MONTH}\\s+${DAY}\\s+(?:and|ve|&)\\s+${DAY}\\b${YEAR}`, "g"), (m) => both(m[2], m[3], m[1], m[4]));
+  take(new RegExp(`\\b${DAY}\\s+(?:and|ve|&)\\s+${DAY}\\s+(?:of\\s+)?${MONTH}${YEAR}`, "g"), (m) => both(m[1], m[2], m[3], m[4]));
   take(new RegExp(`\\b${DAY}${DASH}${DAY}\\s+(?:of\\s+)?${MONTH}${YEAR}`, "g"), (m) => range(m[1], m[2], m[3], m[4]));
   take(new RegExp(`\\b${MONTH}\\s+${DAY}${DASH}${DAY}${YEAR}`, "g"), (m) => range(m[2], m[3], m[1], m[4]));
   take(new RegExp(`\\b${DAY}\\s+(?:of\\s+)?${MONTH}${YEAR}`, "g"), (m) => single(m[1], MONTHS[m[2]], m[3]));
@@ -400,12 +435,27 @@ export function parseMail(mail: MailInput): ParsedMail {
   dates = dates
     .filter((r) => r.end >= sent) // past dates are context, not the event
     .filter((r, i, list) => list.findIndex((o) => sameRange(o, r)) === i);
+
+  // "Starting this week, Wednesday lab sessions will be held in A415": from
+  // the first date (or now) to the end of the semester, on the weekdays named.
+  const recurring = SESSION_CHANGES.includes(classified) && all.some((s) => RECURRING.test(s));
+  let weekdays: number[] | null = null;
+  if (recurring) {
+    const start = dates.length > 0 ? dates.map((r) => r.start).sort()[0] : sent;
+    dates = [{ start: start < sent ? sent : start, end: OPEN_END }];
+    const named = [...new Set(all.filter((s) => s === typeSentence || RECURRING.test(s)).flatMap(weekdaysIn))];
+    weekdays = named.length > 0 ? named : null;
+    vague = false;
+  }
+
   if (dates.length === 0) return { outcome: "unsure", reason: "Tarih bulunamadı", course: course ?? null };
-  if (dates.length > 1) notes.push("Birden fazla tarih var");
+  // Several dates are normal for a cancellation ("October 5 and October 6"),
+  // not for an exam.
+  if (dates.length > 1 && !SESSION_CHANGES.includes(classified)) notes.push("Birden fazla tarih var");
   if (vague) notes.push("Göreli gün ('next …') farklı okunabilir");
 
   // A weekday written next to the date must agree with it.
-  if (dateIndex !== -1 && dates.length === 1 && dates[0].start === dates[0].end) {
+  if (!recurring && dateIndex !== -1 && dates.length === 1 && dates[0].start === dates[0].end) {
     const stated = weekdaysIn(all[dateIndex]);
     if (stated.length > 0 && !stated.includes(isoWeekday(dates[0].start))) notes.push("Gün adı tarihle uyuşmuyor");
   }
@@ -433,6 +483,7 @@ export function parseMail(mail: MailInput): ParsedMail {
     allCourses,
     type,
     dates,
+    weekdays,
     startTime: time.start,
     endTime: type === "exam" || type === "makeup" ? time.end : null,
     kind: type === "exam" ? null : kindOf(typeSentence),
@@ -450,8 +501,6 @@ export type MailEvents = {
   events: EventInput[];
   problem: string | null; // set when nothing could be placed
 };
-
-const SESSION_CHANGES: readonly EventType[] = ["cancel", "online", "room_change"];
 
 function* eachDay(range: DateRange, semester: Semester): Generator<string> {
   const first = range.start > semester.startDate ? range.start : semester.startDate;
@@ -497,7 +546,9 @@ export function mailToEvents(parsed: ParsedMail, semester: Semester, meetings: M
   const events: EventInput[] = [];
   for (const range of parsed.dates) {
     for (const date of eachDay(range, semester)) {
-      let hit = courseMeetings.filter((m) => m.weekday === isoWeekday(date));
+      const weekday = isoWeekday(date);
+      if (parsed.weekdays && !parsed.weekdays.includes(weekday)) continue;
+      let hit = courseMeetings.filter((m) => m.weekday === weekday);
       if (parsed.kind) {
         hit = hit.filter(
           (m) => meetingKind(m, courseMeetings.filter((o) => o.section === m.section)) === parsed.kind,
@@ -517,5 +568,9 @@ export function mailToEvents(parsed: ParsedMail, semester: Semester, meetings: M
     }
   }
   if (events.length === 0) return { events: [], problem: "Mailin söylediği gün/saatte bu dersin oturumu yok" };
-  return { events, problem: null };
+  // "October 5 and 6" plus "the week of October 5" name the same day twice.
+  const unique = events.filter(
+    (e, i) => events.findIndex((o) => o.date === e.date && o.startTime === e.startTime) === i,
+  );
+  return { events: unique, problem: null };
 }

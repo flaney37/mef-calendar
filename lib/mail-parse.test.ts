@@ -104,6 +104,122 @@ As the university has announced a public holiday on 28 October 2026, the online 
 ${FOOTER}`,
 };
 
+const comp205RoomChange: MailInput = {
+  subject: "Systems Programming: COMP 205 – Wednesday Lab Room Change",
+  sentAt: new Date("2026-11-09T10:00:00Z"), // Mon 9 Nov
+  body: `2026-2027-01-COMP205-01
+Systems Programming
+New announcement from INSTRUCTOR
+
+COMP 205 – Wednesday Lab Room Change
+
+Dear Students,
+
+Starting this week, COMP 205 Wednesday laboratory sessions will be held in A415 instead of A303.
+
+Please make sure to attend your lab sessions in A415 from now on.
+
+Best regards,
+
+INSTRUCTOR
+${FOOTER}`,
+};
+
+const comp205LabTomorrow: MailInput = {
+  subject: "Systems Programming: Lab Tomorrow",
+  sentAt: new Date("2026-09-22T10:00:00Z"), // Tue 22 Sep
+  body: `2026-2027-01-COMP205-01
+Systems Programming
+New announcement from INSTRUCTOR
+
+Lab Tomorrow
+
+Hi everyone,
+
+We will have our first lab tomorrow. Starting from this week, labs will be held every week unless announced otherwise in advance. If there is no lab on a particular week, you will be informed beforehand.
+
+Attendance is mandatory, and there will be no make-up labs. You are also required to attend the lab in your assigned section. Please make sure to attend your scheduled lab session regularly.
+
+See you tomorrow, and good luck!
+${FOOTER}`,
+};
+
+const ee203Prelab: MailInput = {
+  subject: "Digital Systems Design: Pre-lab due date for Lab 3-4",
+  sentAt: new Date("2026-11-03T10:00:00Z"),
+  body: `2026-2027-01-EE203-01
+Digital Systems Design
+New announcement from INSTRUCTOR
+
+Pre-lab due date for Lab 3-4
+
+Dear All,
+
+Please note that the deadline for the Lab 3–4 pre-lab has been corrected.
+
+The due date is Wednesday at 2:59 PM.
+${FOOTER}`,
+};
+
+const comp201NoLabsOctober: MailInput = {
+  subject: "Data Structures and Algorithms: No Lab Sessions Next Week (October 5 and October 6)",
+  sentAt: new Date("2026-10-01T10:00:00Z"), // Thu 1 Oct
+  body: `2026-2027-01-COMP201-01
+Data Structures and Algorithms
+New announcement from TEACHING ASSISTANT
+
+No Lab Sessions Next Week (October 5 and October 6)
+
+Dear COMP 201 Students.
+
+As the next lecture will focus on a theoretical topic, there will be no lab sessions in the week of October 5.
+
+Lab sessions will resume in the following week as usual.
+
+Teaching Assistant
+${FOOTER}`,
+};
+
+const comp201AboutLabs: MailInput = {
+  subject: "Data Structures and Algorithms: About the Labs",
+  sentAt: new Date("2026-09-11T10:00:00Z"), // Fri 11 Sep, before term
+  body: `2026-2027-01-COMP201-01
+Data Structures and Algorithms
+New announcement from TEACHING ASSISTANT
+
+About the Labs
+
+Dear COMP 201 students.
+
+There will be no lab sessions during the first week (the week of September 14). Lab sessions will begin next week.
+
+You can find information about the labs in the Labs folder on Blackboard. I have also uploaded some self-study exercises on Java fundamentals under Lab 0.
+
+I wish you success in the upcoming semester.
+${FOOTER}`,
+};
+
+const econOnlineLecture: MailInput = {
+  subject: "INSTRUCTOR sent you a new message in Economics for Engineering",
+  sentAt: new Date("2026-09-15T10:00:00Z"), // Tue 15 Sep
+  body: `2026-2027-01-ECON114-01
+Economics for Engineering
+New message from INSTRUCTOR
+
+Dear Students,
+
+Tomorrow, 16/9/2026 Lecture will be online via Microsoft Teams. this is the link:
+
+Microsoft Teams Online Lecture Link
+
+Best Regards,
+
+INSTRUCTOR
+
+View Message
+${FOOTER}`,
+};
+
 const semester: Semester = {
   startDate: "2026-09-14",
   endDate: "2026-12-11",
@@ -114,7 +230,10 @@ const meetings: Meeting[] = [
   // COMP 201-1: Monday lecture + Monday lab (the real catalog slots).
   { courseCode: "COMP201", section: "1", weekday: 1, startTime: "09:00:00", endTime: "11:50:00", room: "A101" },
   { courseCode: "COMP201", section: "1", weekday: 1, startTime: "13:00:00", endTime: "14:50:00", room: "B201" },
-  { courseCode: "COMP205", section: "1", weekday: 5, startTime: "10:00:00", endTime: "11:50:00", room: "A202" },
+  // COMP 205-1: Friday lecture, Wednesday lab (shorter → "lab").
+  { courseCode: "COMP205", section: "1", weekday: 5, startTime: "10:00:00", endTime: "12:50:00", room: "A202" },
+  { courseCode: "COMP205", section: "1", weekday: 3, startTime: "13:00:00", endTime: "14:50:00", room: "A303" },
+  { courseCode: "ECON114", section: "1", weekday: 3, startTime: "09:00:00", endTime: "11:50:00", room: "Online" },
   { courseCode: "MATH211", section: "3", weekday: 4, startTime: "18:00:00", endTime: "19:50:00", room: "Online" },
 ];
 
@@ -179,6 +298,14 @@ describe("parseMail — real mails", () => {
     expect(p.course).toBeNull();
     expect(p.type).toBe("online");
     expect(p.dates).toEqual([{ start: "2026-10-16", end: "2026-10-16" }]);
+  });
+
+  it("'Lab Tomorrow': an 'if there is no lab…' rule and 'no make-up labs' are not events", () => {
+    expect(parseMail(comp205LabTomorrow)).toMatchObject({ outcome: "ignored" });
+  });
+
+  it("a pre-lab deadline is not a class event", () => {
+    expect(parseMail(ee203Prelab)).toMatchObject({ outcome: "ignored" });
   });
 
   it("postponed midterm → unsure, no event", () => {
@@ -312,6 +439,36 @@ describe("mailToEvents", () => {
     const { events, problem } = run(math211Cancelled);
     expect(events).toEqual([]);
     expect(problem).toMatch(/oturumu yok/);
+  });
+
+  it("COMP 205 permanent room change: every Wednesday lab from now to the end of term, new room not old", () => {
+    const p = event(parseMail(comp205RoomChange));
+    expect(p.type).toBe("room_change");
+    expect(p.room).toBe("A415"); // "held in A415 instead of A303"
+    expect(p.kind).toBe("lab");
+    expect(p.weekdays).toEqual([3]);
+
+    const { events } = run(comp205RoomChange);
+    expect(events.map((e) => e.date)).toEqual(["2026-11-11", "2026-11-18", "2026-11-25", "2026-12-02", "2026-12-09"]);
+    expect(events.every((e) => e.startTime === "13:00" && e.room === "A415" && e.status === "confirmed")).toBe(true);
+  });
+
+  it("COMP 201 'no lab sessions … October 5 and October 6 … week of October 5' → one Monday lab, once", () => {
+    const { events, problem } = run(comp201NoLabsOctober);
+    expect(problem).toBeNull();
+    expect(events).toEqual([
+      expect.objectContaining({ type: "cancel", date: "2026-10-05", startTime: "13:00", status: "confirmed" }),
+    ]);
+  });
+
+  it("COMP 201 'no lab sessions during the first week (the week of September 14)'", () => {
+    const { events } = run(comp201AboutLabs);
+    expect(events).toEqual([expect.objectContaining({ type: "cancel", date: "2026-09-14", startTime: "13:00" })]);
+  });
+
+  it("ECON 114 'Tomorrow, 16/9/2026 Lecture will be online'", () => {
+    const { events } = run(econOnlineLecture);
+    expect(events).toEqual([expect.objectContaining({ type: "online", date: "2026-09-16", startTime: "09:00" })]);
   });
 
   it("school-wide notices are left for /admin", () => {
