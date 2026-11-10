@@ -69,7 +69,8 @@ course_events  id, semester_id, course_code, section (null = all sections),
 - Every VEVENT must have a **stable UID**: `<course>-<section>-<YYYYMMDD>-<HHMM>@mef-calendar`. Otherwise calendar apps duplicate events on every refresh. Separate events (exam, makeup, other) use `event-<course_events.id>@mef-calendar`, so editing their date/time updates the same entry.
 - **Lab label** (decided 2026-11-10): when a section meets more than once a week, slots shorter than its longest slot are the lab: `COMP 201 Lab` (COMP 201-1: Mon 09:00–11:50 lecture, Mon 13:00–14:50 lab). Equal lengths → no lab. Computed from meetings (`meetingKind` in `lib/schedule.ts`), not stored; the UID does not change.
 - **Lecture and lab are independent** (owner: it's usually the lab that gets cancelled, and a 3-hour lecture went online while the lab stayed face-to-face). Session changes (cancel, online, room_change) target one session via `course_events.start_time`; `start_time` null means every session of that course on that date.
-- Cancellation: the event is not deleted; the title becomes `❌ İPTAL – COMP 201` (or `… COMP 201 Lab`) and `STATUS:CANCELLED` is added. A cancellation wins over other changes to the same session.
+- Icons (owner, 2026-11-10): 🧪 before lab sessions (`🧪 COMP 201 Lab`), 💻 before online ones — both courses whose room is "Online" (ECON 114) and sessions moved online. A lab moved online shows 💻.
+- Cancellation: the event is not deleted; the title becomes `❌ İPTAL – COMP 201` (or `… 🧪 COMP 201 Lab`) and `STATUS:CANCELLED` is added. A cancellation wins over other changes to the same session.
 - Unconfirmed cancellation: title `❓ Muhtemelen iptal – COMP 201`, the event is not cancelled.
 - Online (event type `online`, added 2026-11-10): title `COMP 201 (Online)`, `LOCATION:Online`, note in the description (e.g. where the link is). Unconfirmed: `❓ COMP 201 (Muhtemelen online)`, location unchanged.
 - Room change: that session's `LOCATION` is updated and `Sınıf değişti: A → B` is added to the description. Unconfirmed: description note only.
@@ -127,10 +128,11 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
   - 2026-11-10 ✅ 7/7 courses on Mac and iPhone, with two different screenshots (the full-page desktop one and a closer one taken on the phone).
 
 ### Phase 3 — Cancellations, exams and room changes (manual input, fallback panel)
-- [ ] `/admin` — simple panel protected by `ADMIN_PASSWORD`
-- [ ] Add event: course + section (or all sections), type, date, time, room, note, status (confirmed/unconfirmed)
+- [x] `/admin` — simple panel protected by `ADMIN_PASSWORD` (`lib/admin-auth.ts`: constant-time password check, cookie `mef_admin` = `<expiry>.<HMAC(password)>`, httpOnly, SameSite=strict, 7 days; wrong password waits 1 s; changing the password logs everyone out). Every action in `app/admin/actions.ts` re-checks the cookie — verified with a cookieless `saveEvent` POST (rejected, nothing written).
+- [x] Add event: course + section (or all sections), type, date, time, room, note, status (confirmed/unconfirmed). The form loads the course's sections and sessions (Ders / 🧪 Lab, narrowed to the date's weekday); `lib/event-input.ts` validates and rejects session changes that don't hit a real session (wrong weekday, wrong time, holiday, outside the semester).
 - [x] The feed applies these events (cancellation title, exam event, room update) — plus lab labels and the `online` type; 20 feed tests, checked against the DB with a fake course
-- [ ] Event list, edit and delete
+- [x] Event list, edit and delete (upcoming list + collapsed past events; two-step delete)
+- Local testing of `/admin`: start the server with a throwaway password (`ADMIN_PASSWORD=… pnpm start`); an already-set env var wins over `.env.local`, so the real password never has to be typed into a test browser.
 - [ ] **Acceptance:** I enter a cancellation in the panel; after Apple Calendar refreshes, the class shows as "❌ İPTAL"
 
 ### Phase 4 — Automatic capture from emails
