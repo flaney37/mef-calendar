@@ -98,7 +98,7 @@ describe("lab label", () => {
   it("calls the shorter weekly slot of a section the lab", () => {
     const ics = buildFeed(comp201);
     expect(find(ics, LECTURE_16)).toContain("SUMMARY:COMP 201\r\n");
-    expect(find(ics, LAB_16)).toContain("SUMMARY:COMP 201 Lab\r\n");
+    expect(find(ics, LAB_16)).toContain("SUMMARY:🧪 COMP 201 Lab\r\n");
   });
 });
 
@@ -106,7 +106,7 @@ describe("session changes", () => {
   it("cancels only the targeted session: the lab, not that day's lecture", () => {
     const ics = buildFeed({ ...comp201, events: [event({ startTime: "13:00:00" })] });
     const lab = find(ics, LAB_16);
-    expect(lab).toContain("SUMMARY:❌ İPTAL – COMP 201 Lab\r\n");
+    expect(lab).toContain("SUMMARY:❌ İPTAL – 🧪 COMP 201 Lab\r\n");
     expect(lab).toContain("STATUS:CANCELLED\r\n");
     expect(find(ics, LECTURE_16)).toContain("SUMMARY:COMP 201\r\n");
     expect(find(ics, LECTURE_16)).not.toContain("STATUS:");
@@ -137,7 +137,7 @@ describe("session changes", () => {
       buildFeed({ ...comp201, events: [event({ type: "online", startTime: "09:00", note: "Zoom linki Blackboard'da" })] }),
       LECTURE_16,
     );
-    expect(lecture).toContain("SUMMARY:COMP 201 (Online)\r\n");
+    expect(lecture).toContain("SUMMARY:💻 COMP 201 (Online)\r\n");
     expect(lecture).toContain("LOCATION:Online\r\n");
     expect(lecture).toContain("DESCRIPTION:Bu ders online yapılacak.\\nZoom linki Blackboard'da\\n\\n");
   });
@@ -182,6 +182,25 @@ describe("session changes", () => {
       events: [event({ section: "2" }), event({ courseCode: "MATH211" })],
     });
     expect(find(ics, LECTURE_16)).not.toContain("STATUS:");
+  });
+});
+
+describe("icons", () => {
+  it("marks courses that are always online (room 'Online') with 💻", () => {
+    const econ: FeedInput = {
+      ...input,
+      meetings: [{ courseCode: "ECON114", section: "1", weekday: 3, startTime: "09:00", endTime: "11:50", room: "Online" }],
+    };
+    expect(events(buildFeed(econ))[0]).toContain("SUMMARY:💻 ECON 114\r\n");
+  });
+
+  it("shows a lab moved online with 💻, not 🧪", () => {
+    const lab = find(buildFeed({ ...comp201, events: [event({ type: "online", startTime: "13:00" })] }), LAB_16);
+    expect(lab).toContain("SUMMARY:💻 COMP 201 Lab (Online)\r\n");
+  });
+
+  it("leaves a plain lecture without an icon", () => {
+    expect(find(buildFeed(comp201), LECTURE_16)).toContain("SUMMARY:COMP 201\r\n");
   });
 });
 

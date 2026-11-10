@@ -70,7 +70,11 @@ function sectionLines(section: string | null, info: SectionInfo | undefined): st
 
 function sessionEvent(session: Session, info: SectionInfo | undefined, changes: FeedEvent[]): IcsEvent {
   const name = displayCourseCode(session.courseCode) + (session.kind === "lab" ? " Lab" : "");
-  let summary = name;
+  // Icons the owner asked for: 💻 online (always-online courses like
+  // ECON 114, room "Online", and sessions moved online), 🧪 lab.
+  const icon = (online: boolean) => (online ? "💻 " : session.kind === "lab" ? "🧪 " : "");
+  const usuallyOnline = /^online$/i.test(session.room ?? "");
+  let summary = `${icon(usuallyOnline)}${name}`;
   let location = session.room;
   let status: IcsEvent["status"];
   const notes: string[] = [];
@@ -87,21 +91,21 @@ function sessionEvent(session: Session, info: SectionInfo | undefined, changes: 
   }
   for (const e of has("online")) {
     if (e.status === "confirmed") {
-      summary = `${name} (Online)`;
+      summary = `${icon(true)}${name} (Online)`;
       location = "Online";
       notes.push("Bu ders online yapılacak.");
     } else {
-      summary = `❓ ${name} (Muhtemelen online)`;
+      summary = `❓ ${icon(usuallyOnline)}${name} (Muhtemelen online)`;
       notes.push("Bu ders online olabilir (kesin değil).");
     }
   }
   const cancels = has("cancel");
   if (cancels.some((e) => e.status === "confirmed")) {
-    summary = `❌ İPTAL – ${name}`;
+    summary = `❌ İPTAL – ${icon(usuallyOnline)}${name}`;
     status = "CANCELLED";
     notes.push("Bu ders iptal.");
   } else if (cancels.length > 0) {
-    summary = `❓ Muhtemelen iptal – ${name}`;
+    summary = `❓ Muhtemelen iptal – ${icon(usuallyOnline)}${name}`;
     notes.push("Bu ders iptal olabilir (kesin değil).");
   }
   for (const e of changes) if (e.note) notes.push(e.note);
