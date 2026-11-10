@@ -96,14 +96,18 @@ export function planIngest(
   const course = parsed.course;
   const own = sections.filter((s) => s.courseCode === course.courseCode);
   if (own.length === 0) return nothing("unsure", "Gönüllünün kayıtlı olduğu bir ders değil");
+  // Blackboard often puts every section of a course into one shell: the
+  // owner (COMP 205-2, MATH 211-3, EE 203-3) gets mails keyed "…-COMP205-01".
+  // So the key's section says which shell, not which section. The volunteer
+  // received the mail, so it concerns their own section; a person reviews
+  // every mail event anyway. Same when no section is given at all
+  // ("COMP 201 dersi yarın yok").
   let section = course.section;
-  if (section === null) {
-    // "COMP 201 dersi yarın yok" without a section: the volunteer got it,
-    // so it is at least their section. Already unconfirmed (no key).
+  const doubts: string[] = [];
+  if (section === null || !own.some((s) => s.section === section)) {
     if (own.length !== 1) return nothing("unsure", "Section belli değil", true);
+    if (section !== null) doubts.push(`mailde section ${section}, gönüllü section ${own[0].section}`);
     section = own[0].section;
-  } else if (!own.some((s) => s.section === section)) {
-    return nothing("unsure", "Gönüllü bu section'da değil");
   }
 
   const { events, problem } = mailToEvents(
@@ -116,11 +120,12 @@ export function planIngest(
   // Owner's rule (2026-11-10): a person confirms every event read from a
   // mail in /admin. Until then calendars show it with ❓. What the parser
   // wasn't sure about goes into the note, to help the review.
-  const doubts = parsed.notes.length > 0 ? ` · Emin olunmayan: ${parsed.notes.join(", ")}` : "";
+  const allDoubts = [...parsed.notes, ...doubts];
+  const doubtText = allDoubts.length > 0 ? ` · Emin olunmayan: ${allDoubts.join(", ")}` : "";
   const reviewed = events.map((e) => ({
     ...e,
     status: "unconfirmed" as const,
-    note: `${e.note ?? ""}${doubts}`.slice(0, 500),
+    note: `${e.note ?? ""}${doubtText}`.slice(0, 500),
   }));
   return { outcome: "processed", reason: null, events: reviewed, keepSubject: true };
 }

@@ -88,9 +88,12 @@ describe("planIngest", () => {
     expect(p.events[0].note).toContain("Emin olunmayan");
   });
 
-  it("a section the volunteer isn't in → unsure, no events", () => {
+  it("Blackboard's shared shell: key says section 2, volunteer is in 1 → the volunteer's section, noted", () => {
+    // Real case (2026-11-10): the owner is in COMP 205-2 but gets "…-COMP205-01" mails.
     const p = plan({ ...noLabs, body: noLabs.body.replace("COMP201-01", "COMP201-02") });
-    expect(p).toMatchObject({ outcome: "unsure", events: [], keepSubject: false });
+    expect(p.outcome).toBe("processed");
+    expect(p.events).toEqual([expect.objectContaining({ courseCode: "COMP201", section: "1", date: "2026-11-09", startTime: "13:00" })]);
+    expect(p.events[0].note).toContain("mailde section 2, gönüllü section 1");
   });
 
   it("a course the volunteer doesn't take → unsure, subject not kept", () => {
