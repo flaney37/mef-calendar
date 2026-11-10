@@ -55,7 +55,7 @@ Environment variables (`.env.local`, never commit):
 DATABASE_URL=
 GEMINI_API_KEY=          # only if Phase 4's mail parser needs an LLM fallback
 ADMIN_PASSWORD=          # for the fallback panel in Phase 3
-INGEST_SECRET=           # for the mail scripts in Phase 4
+INGEST_SECRET=           # not needed: volunteer tokens are stored as plain SHA-256 hashes (192-bit random tokens)
 ```
 
 ## Data model (draft)
@@ -166,7 +166,11 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 ### Phase 4 — Automatic capture from emails
 - [ ] `POST /api/ingest` — endpoint protected by a per-volunteer token (`volunteers` table: token, name, sections covered)
 - [ ] Google Apps Script (in the `apps-script/` folder): scans Gmail every 10 minutes; sends new mails from `@mef.edu.tr` / Blackboard that contain cancellation/exam keywords to `/api/ingest` with student names stripped; labels the processed ones
+- [x] DB: `volunteers` (student_id unique, SHA-256 `token_hash`, no name/email; covered sections = that student's enrollments) and `ingested_mails` (unique `dedupe_key` = hashed Message-ID, subject, outcome processed/ignored/unsure; body never stored); `course_events.mail_id`. Migration `0004_phase4_mail_ingest` applied 2026-11-10.
 - [ ] Parser: rule-based first (course code regex; "iptal / yapılmayacak / cancel / telafi / sınav / vize / final"; date expressions including "yarın" (tomorrow) and "bu Çarşamba" (this Wednesday), relative to the mail's date); Gemini if not confident
+  - Rule-based parser done: `lib/mail-parse.ts` (`parseMail` → `mailToEvents`), tests built from real inbox mails. Gemini left out for now (would send instructors' mails to Google); unsure cases become ❓ or go to `/admin`.
+  - What real MEF mails look like (2026-11-10): nearly all course mail comes via Blackboard (`do-not-reply@mef.blackboard.com`) with a course key `2026-2027-01-COMP201-01` in the body → exact course + section. The subject usually states what happened; the body has the exact date. The Blackboard footer says "…viewed online" (cut it). Mails mention past dates as context (dropped). Weekdays can name a group ("Thursday session", "Perşembe grubu") — not a date.
+  - Not handled yet: school-wide notices (`[EVERYONE] … tüm dersler online`) need a "all courses" event (schema requires a course); postponements ("ertelendi") need a new date; permanent room changes ("starting this week, the Wednesday lab moves to …").
 - [ ] Confidence level: `confirmed` if certain, otherwise `unconfirmed` (❓)
 - [ ] If the same mail arrives from two volunteers, process it once (Message-ID / content hash)
 - [ ] Volunteer setup page: copy the script, paste the token, set up the trigger
@@ -229,6 +233,7 @@ Don't build any of this until the owner decides; until then exams use option 1 (
 ## Environment notes (learned during setup)
 
 - Node 24 LTS from Homebrew (`node@24`, keg-only → added to fish PATH with `fish_add_path /opt/homebrew/opt/node@24/bin`). pnpm comes from corepack, pinned in `package.json` → `packageManager`.
+- Windows PC (2026-11-10): project at `C:\Dev\mef-calendar` (not the OneDrive Desktop, so `.env.local` isn't synced to the cloud). Node 24 via `winget install OpenJS.NodeJS.LTS --version 24.22.1` (the LTS id now points at 26, and corepack no longer ships from Node 25 on). `corepack enable pnpm` can't write to `C:\Program Files\nodejs` without admin → `corepack enable pnpm --install-directory "$env:APPDATA\npm"` (already on the user PATH). In Windows PowerShell 5.1, pass multi-line commit messages with `git commit -F <file>`.
 - Next.js 16.4 with `cacheComponents` on. Its APIs differ from older Next; read `node_modules/next/dist/docs/` before writing routes (see `AGENTS.md`).
 - pnpm 12 blocks dependency build scripts by default; allowed ones are listed in `pnpm-workspace.yaml` → `allowBuilds` (esbuild is allowed, drizzle-kit needs it).
 - `pnpm typecheck` runs `next typegen` first, because global types like `LayoutProps` are generated.

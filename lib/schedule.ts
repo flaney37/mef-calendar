@@ -63,6 +63,20 @@ function formatDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+export function addDays(date: string, days: number): string {
+  return formatDate(parseDate(date) + days * DAY_MS);
+}
+
+// The Istanbul calendar date of a real instant (e.g. when a mail was sent).
+export function istanbulDate(instant: Date): string {
+  return formatDate(instant.getTime() + ISTANBUL_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+}
+
+// Whole days from a to b (b - a); both YYYY-MM-DD.
+export function daysBetween(a: string, b: string): number {
+  return Math.round((parseDate(b) - parseDate(a)) / DAY_MS);
+}
+
 // JS getUTCDay(): 0 = Sunday … 6 = Saturday. ISO: 1 = Monday … 7 = Sunday.
 export function isoWeekday(date: string): number {
   const jsDay = new Date(parseDate(date)).getUTCDay();
