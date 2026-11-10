@@ -394,6 +394,124 @@ describe("parseMail — dates and wording", () => {
   });
 });
 
+// Found by running the parser over 400 inbox mails (2026-11-10). Each was
+// read wrongly before the fix next to it.
+describe("parseMail — inbox sweep", () => {
+  const mail = (iso: string, subject: string, body: string) => parseMail({ subject, body, sentAt: new Date(iso) });
+
+  it("'decided not to hold the sessions online' is not an online notice", () => {
+    const p = mail(
+      "2026-10-15T08:00:00Z",
+      "Digital Systems Design: Update on Lab Sections 3.1 & 4.1",
+      `2026-2027-01-EE203-01
+Regarding today's lab sessions: given the hands-on nature of the labs, and because we care about all sections working under the same conditions, we have decided not to hold the sessions online.`,
+    );
+    expect(p.outcome).not.toBe("event");
+  });
+
+  it("Turkish 'online olmayacaktır' is not a cancellation", () => {
+    const p = mail("2026-11-09T08:00:00Z", "2026-2027-01-COMP205-01 Duyuru", "Yarınki ders online olmayacaktır, sınıfta işlenecektir.");
+    expect(p.outcome).not.toBe("event");
+  });
+
+  it("a poll's options are not decisions", () => {
+    const p = mail(
+      "2026-10-20T08:00:00Z",
+      "Systems Programming: Lab Schedule This Week (Quick Poll)",
+      `2026-2027-01-COMP205-01
+So for this week's labs, I have two options for you:
+Option 1: Hold the Wednesday and Friday lab sessions online.
+Option 2: Cancel this week's labs and start directly on campus week after.`,
+    );
+    expect(p.outcome).not.toBe("event");
+  });
+
+  it("PHYS 104L: cancelled days and make-up days in one mail → only the cancelled ones", () => {
+    const p = event(
+      mail(
+        "2026-03-12T08:00:00Z",
+        "Physics II Lab: Dersler Hk.",
+        `2025-2026-02-PHYS104L-01
+Merhaba, 17 Mart ( Salı) , 19 Mart (Perşembe) ve 20 Mart (Cuma ) günlerindeki dersler Ramazan Bayramı dolayısıyla yapılmayacaktır. 24 Mart (Salı ), 26 Mart (Perşembe ) ve 27 Mart (Cuma) günleri telafi dersleri yapılacaktır.`,
+      ),
+    );
+    expect(p.type).toBe("cancel");
+    expect(p.dates.map((r) => r.start)).toEqual(["2026-03-17", "2026-03-19", "2026-03-20"]);
+  });
+
+  it("'Lecture 6 and quiz will be online on MS Teams' moves the lecture, it's not an exam", () => {
+    const p = event(
+      mail(
+        "2026-10-22T08:00:00Z",
+        "Systems Programming: Lecture 6 on 23rd October Friday, on teams",
+        "2026-2027-01-COMP205-01\nDue to the health issues Lecture 6 and quiz will be online on MS Teams.",
+      ),
+    );
+    expect(p.type).toBe("online");
+    expect(p.kind).toBe("lecture");
+    expect(p.dates).toEqual([{ start: "2026-10-23", end: "2026-10-23" }]);
+  });
+
+  it("'TÜBİTAK 2209' is not a course code, '[EVERYONE] … Online Açılış Töreni' is not school-wide", () => {
+    expect(
+      mail("2026-10-19T08:00:00Z", "[STUDENTS] TÜBİTAK 2209-A ve 2209-B 2026 Çağrıları", "Toplantı 21 Ekim'de online yapılacaktır."),
+    ).toMatchObject({ outcome: "unsure", course: null });
+    expect(
+      mail("2026-09-10T08:00:00Z", "[EVERYONE] 2026-2027 Akademik Yılı Online Açılış Töreni Davetiyesi", "Tören 12 Eylül'de online yapılacaktır."),
+    ).toMatchObject({ outcome: "unsure", course: null });
+  });
+
+  it("score / objection mails are ignored", () => {
+    expect(mail("2026-06-04T08:00:00Z", "Calculus II: Final Exam Scores and Objection Times", "Objection on 9 June at 15:00.").outcome).toBe("ignored");
+  });
+
+  it("an exam needs one day in its own sentence", () => {
+    // "Video quizzes" for a whole week: homework, not an exam event.
+    expect(mail("2026-09-26T08:00:00Z", "2026-2027-01-MATH211-01 Video Quizzes", "Please solve the video quizzes next week.").outcome).toBe("unsure");
+    // Practice problems mentioning the midterm, and a weekday elsewhere.
+    expect(
+      mail(
+        "2026-10-07T08:00:00Z",
+        "Linear Algebra: Practice problems from the book",
+        "2026-2027-01-MATH211-01\nAs I mentioned during the lecture on Monday, here is a list of practice problems.\nThey will help you prepare for the midterm.",
+      ).outcome,
+    ).toBe("unsure");
+  });
+
+  it("12-hour times: 'today at 2:00 PM' → 14:00", () => {
+    const p = event(
+      mail(
+        "2026-02-21T07:00:00Z",
+        "Physics II Lab: Safety makeup reminder",
+        "2025-2026-02-PHYS104L-01\nThe makeup exam for students who were unable to attend will be held today at 2:00 PM.",
+      ),
+    );
+    expect(p.startTime).toBe("14:00");
+  });
+
+  it("'from 14:00 to 14:40' is a time range", () => {
+    const p = event(
+      mail("2026-02-13T08:00:00Z", "2025-2026-02-PHYS104-01 Exams Schedule", "Online Test 1: Saturday, February 28th, from 14:00 to 14:40. In-class exam at 10 am."),
+    );
+    expect(p).toMatchObject({ startTime: "14:00", endTime: "14:40" });
+  });
+
+  it("a Saturday mail about 'next week' means the coming Monday's week", () => {
+    // Sat 10 Oct 2026 → week of Mon 12 Oct.
+    const p = event(
+      mail("2026-10-10T08:00:00Z", "Data Structures and Algorithms: Preparing for Next Week's Online Lecture", "2026-2027-01-COMP201-01\nNext week's lecture will be online."),
+    );
+    expect(p.dates).toEqual([{ start: "2026-10-12", end: "2026-10-18" }]);
+  });
+
+  it("'Classroom update' + 'Today's lab will take place in A415' → lab room change", () => {
+    const p = event(
+      mail("2026-11-04T08:00:00Z", "Systems Programming: Classroom update", "2026-2027-01-COMP205-01\nToday's lab will take place in A415."),
+    );
+    expect(p).toMatchObject({ type: "room_change", kind: "lab", room: "A415", dates: [{ start: "2026-11-04", end: "2026-11-04" }] });
+  });
+});
+
 describe("mailToEvents", () => {
   const run = (mail: MailInput) => mailToEvents(parseMail(mail), semester, meetings, mail.subject);
 
