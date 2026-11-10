@@ -26,7 +26,7 @@ Goal: first a zero-cost MVP (my own class + friends), then offer it to the schoo
 ## Status (update when it changes)
 
 - Phases 0–3 done and accepted on a real iPhone/Mac (2026-11-10). Live at https://mef-calendar.vercel.app, repo `flaney37/mef-calendar`, pushes to `main` deploy automatically.
-- **Next: Phase 4** (emails → events). Start with a short plan.
+- **Phase 4 in progress** (emails → events). Live since 2026-11-10 (`main` @ 43c1004): `/api/ingest`, mail parser, `/admin` review list, "Gönüllü ol" on the edit page. `pnpm ingest:smoke https://mef-calendar.vercel.app` passed 10/10 against the live site. Next: the owner installs the script in the school Gmail (does MEF's Workspace allow Apps Script + outside requests?), then review notifications, unsure mails in `/admin`, the coverage warning.
 - Small leftovers: an orphaned student record of the owner's (they lost its edit link; harmless, delete on request); `.claude/launch.json` is local-only (absolute Mac path), not committed.
 - New machine setup: Node 24 LTS, `corepack enable pnpm`, `pnpm install`. `.env.local` is not in git: the owner copies it over themselves (DATABASE_URL can also be copied from Vercel → Settings → Environment Variables; ADMIN_PASSWORD is in their notes). `data/` (catalog export, OCR samples) is gitignored too; only needed to re-import the catalog (`pnpm db:import-catalog`), the DB already has it.
 

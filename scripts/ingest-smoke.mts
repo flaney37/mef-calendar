@@ -75,9 +75,10 @@ try {
   const events = await sql`select type, date::text as date, start_time::text as start, status, source, mail_id
                            from course_events where semester_id = ${semesterId} and course_code = 'TEST999'`;
   check(
-    "DB: one cancel on 2026-11-16 13:00, from mail",
+    "DB: one unconfirmed cancel on 2026-11-16 13:00, from mail",
     events.length === 1 && events[0].type === "cancel" && events[0].date === "2026-11-16" &&
-      events[0].start === "13:00:00" && events[0].source === "mail" && events[0].mail_id !== null,
+      events[0].start === "13:00:00" && events[0].source === "mail" && events[0].mail_id !== null &&
+      events[0].status === "unconfirmed",
     JSON.stringify(events),
   );
 
@@ -87,7 +88,12 @@ try {
 
   const ics = await (await fetch(`${base}/cal/${feedToken}.ics`)).text();
   const cancelled = ics.split("BEGIN:VEVENT").find((e) => e.includes("20261116T1300"));
-  check("feed: the 16 Nov lab shows as İPTAL + STATUS:CANCELLED", !!cancelled && cancelled.includes("İPTAL") && cancelled.includes("STATUS:CANCELLED"), cancelled?.slice(0, 300) ?? "no such event");
+  // Mail events wait for a person's confirmation: ❓, not cancelled yet.
+  check(
+    "feed: the 16 Nov lab shows as ❓ Muhtemelen iptal (not yet cancelled)",
+    !!cancelled && cancelled.includes("Muhtemelen iptal") && !cancelled.includes("STATUS:CANCELLED"),
+    cancelled?.slice(0, 300) ?? "no such event",
+  );
   const lecture = ics.split("BEGIN:VEVENT").find((e) => e.includes("20261116T0900"));
   check("feed: the 16 Nov lecture is untouched", !!lecture && !lecture.includes("İPTAL"), lecture?.slice(0, 300) ?? "no such event");
 } finally {
