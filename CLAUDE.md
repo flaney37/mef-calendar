@@ -4,6 +4,32 @@ An automatic class calendar for MEF University students. A student uploads a scr
 
 Goal: first a zero-cost MVP (my own class + friends), then offer it to the school as a free service. No SaaS / sales goal.
 
+## Working with the owner
+
+- Owner: 2nd-year Computer Engineering student at MEF University, Istanbul, learning as we go. **Talk to them in Turkish**; code, identifiers and commit messages in English; UI text in Turkish.
+- Go phase by phase. Before a phase: a short plan. At the end: exact steps to test it themselves, incl. subscribing on iPhone/Mac. Explain non-obvious choices briefly — they want to understand the code, not just receive it.
+- Tick the roadmap boxes here as items are done; add what we learn to the relevant section or "Open questions".
+- When a fix fails, try up to 3 times, then stop and report the error.
+- Zero cost: free tiers only (Vercel Hobby, Neon free). Never add a payment method anywhere.
+- Never commit secrets. Ask before creating accounts or running anything that needs their credentials. Never put secrets (DB URL, admin password, feed/edit tokens) into chat; write them to `.env.local` directly or let the owner paste them.
+- The production DB is the only DB: test with fake courses (`TEST999`, tokens `TESTfeedToken…`) and delete them afterwards, so friends' calendars never show test data.
+
+## Context: MEF's systems
+
+- **SIS** (sis.mef.edu.tr): no public API, server-rendered HTML behind a login. The student's schedule page (`/ogrenciler/belge/ogrdersprogrami`) has Excel/PDF export; the Excel export shifts day columns (ECON 114 on Wednesday lands under Thursday), but its course list (code, name, section, instructor, credits) is reliable. The top of that page shows TC Kimlik No, first and last name.
+- Full catalog of every section: `/dersler/dersprogrami/tumprogram` (see "Course catalog"). An existing student project, mefcourseplanner.vercel.app, scraped it once into static JSON.
+- Some courses have no fixed slot (HISTR 213, TURK 114): in the course list, not in the weekly grid or catalog.
+- **Email** runs on Google Workspace (MX → Google), hence Google Apps Script for Phase 4.
+- **Blackboard Learn Ultra** (mef.blackboard.com) gives each student a personal iCal feed with assignment due dates but no class times (instructors don't enter them). Phase 5 merges it optionally.
+- Instructors won't use a new tool: cancellations must come from emails (Phase 4); `/admin` is the fallback.
+
+## Status (update when it changes)
+
+- Phases 0–3 done and accepted on a real iPhone/Mac (2026-11-10). Live at https://mef-calendar.vercel.app, repo `flaney37/mef-calendar`, pushes to `main` deploy automatically.
+- **Next: Phase 4** (emails → events). Start with a short plan.
+- Small leftovers: an orphaned student record of the owner's (they lost its edit link; harmless, delete on request); `.claude/launch.json` is local-only (absolute Mac path), not committed.
+- New machine setup: Node 24 LTS, `corepack enable pnpm`, `pnpm install`. `.env.local` is not in git: the owner copies it over themselves (DATABASE_URL can also be copied from Vercel → Settings → Environment Variables; ADMIN_PASSWORD is in their notes). `data/` (catalog export, OCR samples) is gitignored too; only needed to re-import the catalog (`pnpm db:import-catalog`), the DB already has it.
+
 ---
 
 ## Core decisions (ask before changing)
