@@ -114,7 +114,7 @@ function sentences(text: string): string[] {
 // ---------------------------------------------------------------------------
 // Course
 
-const BLACKBOARD_KEY = /\b\d{4}-\d{4}-\d{2}-([A-Z]{2,6}\d{3,4}[A-Z]?)-(\d{1,3})\b/i;
+export const BLACKBOARD_KEY = /\b\d{4}-\d{4}-\d{2}-([A-Z]{2,6}\d{3,4}[A-Z]?)-(\d{1,3})\b/i;
 // "COMP 201", "ECON114", "MATH 211". Uppercase only, so ordinary words
 // followed by a number ("Lab 6", "Lecture 7") don't count.
 // The lookbehind also rejects non-ASCII letters: "TÜBİTAK 2209" is not "TAK 2209".

@@ -164,7 +164,12 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
   - 2026-11-10 ✅ owner tested on the live site: cancellation, online and unconfirmed (❓) events show up in Apple Calendar, 🧪/💻 icons in place.
 
 ### Phase 4 — Automatic capture from emails
-- [ ] `POST /api/ingest` — endpoint protected by a per-volunteer token (`volunteers` table: token, name, sections covered)
+- [x] `POST /api/ingest` — endpoint protected by a per-volunteer token (`volunteers` table: token, name, sections covered)
+  - `app/api/ingest/route.ts` (HTTP), `lib/ingest-plan.ts` (pure, tested: Zod body `{messageId, from, subject, body, sentAt}`, sender check on the real `<address>` — `@mef.edu.tr` / `@mef.blackboard.com`, token hash, dedupe key, rules), `lib/db/ingest.ts`. Response is only `{status, events}`; the mail body is never stored or logged.
+  - Events only for the volunteer's own sections. A course code without a section → the volunteer's section, unconfirmed. No course key → the subject prefix ("Calculus II: …") is matched against the volunteer's course names.
+  - The subject is stored only when the mail is about one of the volunteer's courses (a personal mail that slips through keeps nothing but its hash).
+  - Dedupe in two layers: `ingested_mails.dedupe_key` (a mail that was only ignored/unsure may be retried by another volunteer who is in the section), and per event (same course/section/type/date/time is not added again — Blackboard likely gives every student a copy with its own Message-ID).
+  - `pnpm ingest:smoke` (with `pnpm dev` running): end-to-end against the real DB with TEST999 + TEST tokens, cleans up after itself. 2026-11-10 ✅ 10/10 (processed, duplicate, second copy, non-MEF sender, 401, 400, DB row, feed shows İPTAL on the lab and leaves the lecture).
 - [ ] Google Apps Script (in the `apps-script/` folder): scans Gmail every 10 minutes; sends new mails from `@mef.edu.tr` / Blackboard that contain cancellation/exam keywords to `/api/ingest` with student names stripped; labels the processed ones
 - [x] DB: `volunteers` (student_id unique, SHA-256 `token_hash`, no name/email; covered sections = that student's enrollments) and `ingested_mails` (unique `dedupe_key` = hashed Message-ID, subject, outcome processed/ignored/unsure; body never stored); `course_events.mail_id`. Migration `0004_phase4_mail_ingest` applied 2026-11-10.
 - [ ] Parser: rule-based first (course code regex; "iptal / yapılmayacak / cancel / telafi / sınav / vize / final"; date expressions including "yarın" (tomorrow) and "bu Çarşamba" (this Wednesday), relative to the mail's date); Gemini if not confident
@@ -176,8 +181,8 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
   - Some older Blackboard mails have no course key in the body, only "Calculus II: …" in the subject. Idea for ingest: pass the volunteer's own sections with course names so the subject prefix can be matched.
   - One mail can hold two events (cancelled days + make-up days): only the first is taken today.
   - Not handled yet: school-wide notices (`[EVERYONE] … tüm dersler online`) need a "all courses" event (schema requires a course); postponements ("ertelendi") need a new date; 12-hour times ("2:59 PM").
-- [ ] Confidence level: `confirmed` if certain, otherwise `unconfirmed` (❓)
-- [ ] If the same mail arrives from two volunteers, process it once (Message-ID / content hash)
+- [x] Confidence level: `confirmed` if certain, otherwise `unconfirmed` (❓)
+- [x] If the same mail arrives from two volunteers, process it once (Message-ID / content hash)
 - [ ] Volunteer setup page: copy the script, paste the token, set up the trigger
 - [ ] Coverage map: which sections have a volunteer
   - Coverage must be **per section, never per cohort/year** (owner, 2026-11-10): students taking courses from a lower year (alttan ders) or a mixed schedule don't share all courses with "their" class, so a volunteer from the normal cohort does not receive that section's mails. Count volunteers per `course_code + section` from their own enrollments.
