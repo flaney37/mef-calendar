@@ -74,6 +74,7 @@ type MailRow = {
   sentAt: Date;
   subject: string | null;
   outcome: "processed" | "ignored" | "unsure";
+  reason: string | null;
 };
 
 // One row per mail. Returns null when this mail was already processed (the
@@ -90,7 +91,7 @@ export async function recordMail(row: MailRow): Promise<number | null> {
 
   const [updated] = await db
     .update(ingestedMails)
-    .set({ volunteerId: row.volunteerId, subject: row.subject, outcome: row.outcome })
+    .set({ volunteerId: row.volunteerId, subject: row.subject, outcome: row.outcome, reason: row.reason })
     .where(and(eq(ingestedMails.dedupeKey, row.dedupeKey), ne(ingestedMails.outcome, "processed")))
     .returning({ id: ingestedMails.id });
   return updated?.id ?? null;

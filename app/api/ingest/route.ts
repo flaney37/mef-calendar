@@ -42,6 +42,7 @@ export async function POST(request: Request) {
       sentAt: new Date(input.sentAt),
       subject: plan.keepSubject ? input.subject.slice(0, 300) : null,
       outcome: plan.outcome,
+      reason: plan.reason,
     });
     if (mailId === null) return Response.json({ status: "duplicate", events: 0 });
 

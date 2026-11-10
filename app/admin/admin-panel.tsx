@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { displayCourseCode } from "@/lib/course-code";
-import type { AdminEvent, AdminSection } from "@/lib/db/admin-queries";
+import type { AdminEvent, AdminMail, AdminSection } from "@/lib/db/admin-queries";
 import { SESSION_CHANGE_TYPES, type EventType } from "@/lib/event-input";
 import { isoWeekday } from "@/lib/schedule";
 import { inputClass } from "../feed-links";
@@ -58,9 +58,11 @@ function formatDate(date: string) {
 export function AdminPanel({
   semester,
   initialEvents,
+  mails,
 }: {
   semester: { name: string; startDate: string; endDate: string };
   initialEvents: AdminEvent[];
+  mails: AdminMail[];
 }) {
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
@@ -186,6 +188,8 @@ export function AdminPanel({
           </p>
         </div>
       )}
+
+      <MailList mails={mails} />
 
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <h2 className="font-medium">{form.id ? "Olayı düzenle" : "Yeni olay"}</h2>
@@ -364,6 +368,66 @@ export function AdminPanel({
         </details>
       )}
     </div>
+  );
+}
+
+const OUTCOME_LABELS: Record<AdminMail["outcome"], string> = {
+  processed: "✅ İşlendi",
+  unsure: "❓ Belirsiz",
+  ignored: "➖ İlgisiz",
+};
+
+function formatSent(iso: string) {
+  return new Date(iso).toLocaleString("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// What the volunteers' scripts sent and what each mail became. Mail text is
+// never stored, so only the subject (when kept) and the outcome are shown;
+// to read an unsure mail, open it in Gmail.
+function MailList({ mails }: { mails: AdminMail[] }) {
+  if (mails.length === 0) return null;
+  const count = (o: AdminMail["outcome"]) => mails.filter((m) => m.outcome === o).length;
+  return (
+    <details className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+      <summary className="cursor-pointer font-medium">
+        Son gelen mailler · {mails.length}{" "}
+        <span className="text-sm font-normal text-zinc-500">
+          ({count("processed")} işlendi, {count("unsure")} belirsiz, {count("ignored")} ilgisiz)
+        </span>
+      </summary>
+      <ul className="mt-3 flex flex-col gap-2">
+        {mails.map((m) => (
+          <li key={m.id} className="flex flex-col gap-0.5 rounded-md border border-zinc-200 p-2 text-sm dark:border-zinc-800">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <span className="font-medium">{OUTCOME_LABELS[m.outcome]}</span>
+              <span className="text-zinc-500">
+                {formatSent(m.sentAt)} · {m.volunteerId ? `gönüllü #${m.volunteerId}` : "gönüllü silinmiş"}
+              </span>
+            </div>
+            <div className={m.subject ? "" : "text-zinc-500"}>
+              {m.subject ?? "(konu saklanmadı: gönüllünün derslerinden biriyle ilgili değil)"}
+            </div>
+            {m.reason && <div className="text-zinc-600 dark:text-zinc-400">Neden: {m.reason}</div>}
+            {m.events.map((e) => (
+              <div key={e.id} className="text-zinc-600 dark:text-zinc-400">
+                → {displayCourseCode(e.courseCode)}
+                {e.section ? `-${e.section}` : ""} · {formatDate(e.date)} · {TYPE_LABELS[e.type]}
+                {e.status === "unconfirmed" ? " · ❓ onay bekliyor" : " · onaylandı"}
+              </div>
+            ))}
+            {m.outcome === "processed" && m.events.length === 0 && (
+              <div className="text-zinc-500">→ olaylar silinmiş ya da zaten vardı</div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

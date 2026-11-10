@@ -1,11 +1,11 @@
 // Database access for the /admin panel. Callers must have checked the
 // admin session first (app/admin/actions.ts does).
 
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { EventInput } from "@/lib/event-input";
 import { meetingKind, toHHMM, type Meeting } from "@/lib/schedule";
 import { db } from "./index";
-import { courseEvents, meetings, sections, semesters } from "./schema";
+import { courseEvents, ingestedMails, meetings, sections, semesters } from "./schema";
 
 export async function currentSemester() {
   const [semester] = await db
@@ -113,6 +113,57 @@ export async function updateEvent(semesterId: number, id: number, event: EventIn
     .where(and(eq(courseEvents.id, id), eq(courseEvents.semesterId, semesterId)))
     .returning({ id: courseEvents.id });
   return rows.length > 0;
+}
+
+export type AdminMail = {
+  id: number;
+  volunteerId: number | null;
+  sentAt: string; // ISO
+  subject: string | null; // kept only for mails about the volunteer's courses
+  outcome: "processed" | "ignored" | "unsure";
+  reason: string | null;
+  events: { id: number; courseCode: string; section: string | null; type: AdminEvent["type"]; date: string; status: "confirmed" | "unconfirmed" }[];
+};
+
+// The latest mails volunteers' scripts sent, newest first, with what each
+// one became. No mail text exists to show: it is never stored.
+export async function listRecentMails(limit = 40): Promise<AdminMail[]> {
+  const mails = await db
+    .select({
+      id: ingestedMails.id,
+      volunteerId: ingestedMails.volunteerId,
+      sentAt: ingestedMails.sentAt,
+      subject: ingestedMails.subject,
+      outcome: ingestedMails.outcome,
+      reason: ingestedMails.reason,
+    })
+    .from(ingestedMails)
+    .orderBy(desc(ingestedMails.sentAt))
+    .limit(limit);
+  const ids = mails.map((m) => m.id);
+  const events =
+    ids.length === 0
+      ? []
+      : await db
+          .select({
+            id: courseEvents.id,
+            mailId: courseEvents.mailId,
+            courseCode: courseEvents.courseCode,
+            section: courseEvents.section,
+            type: courseEvents.type,
+            date: courseEvents.date,
+            status: courseEvents.status,
+          })
+          .from(courseEvents)
+          .where(inArray(courseEvents.mailId, ids))
+          .orderBy(asc(courseEvents.date));
+  return mails.map((m) => ({
+    ...m,
+    sentAt: m.sentAt.toISOString(),
+    events: events
+      .filter((e) => e.mailId === m.id)
+      .map((e) => ({ id: e.id, courseCode: e.courseCode, section: e.section, type: e.type, date: e.date, status: e.status })),
+  }));
 }
 
 // The review step for events read from mails: one click in /admin.

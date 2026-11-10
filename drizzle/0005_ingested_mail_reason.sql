@@ -1,0 +1,1 @@
+ALTER TABLE "ingested_mails" ADD COLUMN "reason" text;

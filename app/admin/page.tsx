@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { currentSemester, listEvents } from "@/lib/db/admin-queries";
+import { currentSemester, listEvents, listRecentMails } from "@/lib/db/admin-queries";
 import { isAdmin } from "./actions";
 import { AdminPanel } from "./admin-panel";
 import { LoginForm } from "./login-form";
@@ -26,10 +26,12 @@ export default function AdminPage() {
 async function AdminGate() {
   if (!(await isAdmin())) return <LoginForm />;
   const semester = await currentSemester();
+  const [events, mails] = await Promise.all([listEvents(semester.id), listRecentMails()]);
   return (
     <AdminPanel
       semester={{ name: semester.name, startDate: semester.startDate, endDate: semester.endDate }}
-      initialEvents={await listEvents(semester.id)}
+      initialEvents={events}
+      mails={mails}
     />
   );
 }

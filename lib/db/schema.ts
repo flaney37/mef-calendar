@@ -192,6 +192,9 @@ export const ingestedMails = pgTable("ingested_mails", {
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
   subject: text("subject"),
   outcome: mailOutcome("outcome").notNull(),
+  // Why it was ignored / unsure ("Ertelendi: yeni tarih elle girilmeli"),
+  // shown in /admin. Fixed Turkish phrases from the parser, never mail text.
+  reason: text("reason"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
