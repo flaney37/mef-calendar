@@ -151,7 +151,7 @@ describe("session changes", () => {
     expect(lab).toContain("Sınıf değişti: A415 → B202");
   });
 
-  it("does not move an unconfirmed room change, only mentions it", () => {
+  it("shows an unconfirmed room change next to the usual room", () => {
     const lab = find(
       buildFeed({
         ...comp201,
@@ -159,8 +159,16 @@ describe("session changes", () => {
       }),
       LAB_16,
     );
-    expect(lab).toContain("LOCATION:A415\r\n");
+    expect(lab).toContain("LOCATION:A415 - ? B202\r\n");
     expect(lab).toContain("Sınıf değişmiş olabilir: B202 (kesin değil)");
+  });
+
+  it("shows a maybe-online session next to the usual room", () => {
+    const lecture = find(
+      buildFeed({ ...comp201, events: [event({ type: "online", startTime: "09:00", status: "unconfirmed" })] }),
+      LECTURE_16,
+    );
+    expect(lecture).toContain("LOCATION:A101 - ? Online\r\n");
   });
 
   it("lets a cancellation win over other changes to the same session", () => {

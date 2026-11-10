@@ -80,6 +80,10 @@ function sessionEvent(session: Session, info: SectionInfo | undefined, changes: 
   const notes: string[] = [];
   const has = (type: FeedEvent["type"]) => changes.filter((e) => e.type === type);
 
+  // An unconfirmed new place is shown next to the usual one, so it is
+  // visible in the calendar list without opening the event: "A101 - ? A415".
+  const maybe = (place: string) => `${location ?? "?"} - ? ${place}`;
+
   // Applied in order of strength: a cancellation outranks everything else.
   for (const e of has("room_change")) {
     if (e.status === "confirmed" && e.room) {
@@ -87,6 +91,7 @@ function sessionEvent(session: Session, info: SectionInfo | undefined, changes: 
       location = e.room;
     } else {
       notes.push(`Sınıf değişmiş olabilir${e.room ? `: ${e.room}` : ""} (kesin değil)`);
+      if (e.room) location = maybe(e.room);
     }
   }
   for (const e of has("online")) {
@@ -97,6 +102,7 @@ function sessionEvent(session: Session, info: SectionInfo | undefined, changes: 
     } else {
       summary = `❓ ${icon(usuallyOnline)}${name} (Muhtemelen online)`;
       notes.push("Bu ders online olabilir (kesin değil).");
+      if (!usuallyOnline) location = maybe("Online");
     }
   }
   const cancels = has("cancel");

@@ -73,7 +73,7 @@ course_events  id, semester_id, course_code, section (null = all sections),
 - Cancellation: the event is not deleted; the title becomes `❌ İPTAL – COMP 201` (or `… 🧪 COMP 201 Lab`) and `STATUS:CANCELLED` is added. A cancellation wins over other changes to the same session.
 - Unconfirmed cancellation: title `❓ Muhtemelen iptal – COMP 201`, the event is not cancelled.
 - Online (event type `online`, added 2026-11-10): title `COMP 201 (Online)`, `LOCATION:Online`, note in the description (e.g. where the link is). Unconfirmed: `❓ COMP 201 (Muhtemelen online)`, location unchanged.
-- Room change: that session's `LOCATION` is updated and `Sınıf değişti: A → B` is added to the description. Unconfirmed: description note only.
+- Room change: that session's `LOCATION` is updated and `Sınıf değişti: A → B` is added to the description. Unconfirmed: `LOCATION` shows both, `A101 - ? A415` (owner, 2026-11-10), plus a description note. Unconfirmed online likewise: `A101 - ? Online`.
 - Exam: separate VEVENT, title `📝 COMP 201 Vize` (`title` column; default "Sınav"). Make-up: `🔁 COMP 201 Telafi`. Other: `ℹ️ COMP 201 – <title>`. No start time → all-day event; start but no end → 1 hour. Unconfirmed → `❓ ` prefix.
 - `DESCRIPTION` contains change notes first (if any), then the course name, section and instructor.
 
