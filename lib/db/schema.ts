@@ -138,9 +138,61 @@ export const courseEvents = pgTable(
     note: text("note"),
     status: eventStatus("status").notNull().default("confirmed"),
     source: eventSource("source").notNull().default("manual"),
+    // The mail this event was read from (source = 'mail'); null for manual
+    // events. Kept when the mail record is pruned.
+    mailId: integer("mail_id").references(() => ingestedMails.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (t) => [index("course_events_course_idx").on(t.semesterId, t.courseCode)],
 );
+
+// A student who runs the Gmail script (Phase 4). No name or email: the
+// volunteer is just a student record, and the sections they cover are their
+// own enrollments, counted per course + section (never per cohort).
+// Only a SHA-256 hash of the ingest token is stored. The token is 192 random
+// bits, so a plain hash is enough: a leaked DB can't be turned back into
+// working tokens, and nothing needs a server-side secret to check one.
+export const volunteers = pgTable("volunteers", {
+  id: serial("id").primaryKey(),
+  studentId: integer("student_id")
+    .notNull()
+    .unique()
+    .references(() => students.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+});
+
+// processed: at least one event was written. ignored: no course/keyword
+// found. unsure: something was found but couldn't be placed (no matching
+// session, ambiguous date) — shown in /admin for a human to look at.
+export const mailOutcome = pgEnum("mail_outcome", [
+  "processed",
+  "ignored",
+  "unsure",
+]);
+
+// One row per mail, so the same mail sent by two volunteers is handled once.
+// The mail text itself is never stored: only a hash to recognise it again,
+// the subject (for /admin) and what came out of it.
+export const ingestedMails = pgTable("ingested_mails", {
+  id: serial("id").primaryKey(),
+  // sha256 of the Message-ID header (identical in every recipient's copy),
+  // or of the normalised sender + date + body when there is none.
+  dedupeKey: text("dedupe_key").notNull().unique(),
+  volunteerId: integer("volunteer_id").references(() => volunteers.id, {
+    onDelete: "set null",
+  }),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
+  subject: text("subject"),
+  outcome: mailOutcome("outcome").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
