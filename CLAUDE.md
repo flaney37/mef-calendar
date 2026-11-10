@@ -134,7 +134,8 @@ Goal: a subscription that works on a phone, by the shortest path, without AI.
 - [x] Event list, edit and delete (upcoming list + collapsed past events; two-step delete)
 - [ ] Later (owner: not now): `time_change` event type — a session moved to another time. Needs new columns for the new start/end (`start_time` already picks the session). Confirmed → move the session, same UID. Unconfirmed → keep it, title `❓ COMP 201 (belki 10:00–11:50)` (a calendar event has only one time, so the `A101 - ? A415` trick doesn't work here). Today this has to be entered as cancel + make-up.
 - Local testing of `/admin`: start the server with a throwaway password (`ADMIN_PASSWORD=… pnpm start`); an already-set env var wins over `.env.local`, so the real password never has to be typed into a test browser.
-- [ ] **Acceptance:** I enter a cancellation in the panel; after Apple Calendar refreshes, the class shows as "❌ İPTAL"
+- [x] **Acceptance:** I enter a cancellation in the panel; after Apple Calendar refreshes, the class shows as "❌ İPTAL"
+  - 2026-11-10 ✅ owner tested on the live site: cancellation, online and unconfirmed (❓) events show up in Apple Calendar, 🧪/💻 icons in place.
 
 ### Phase 4 — Automatic capture from emails
 - [ ] `POST /api/ingest` — endpoint protected by a per-volunteer token (`volunteers` table: token, name, sections covered)
